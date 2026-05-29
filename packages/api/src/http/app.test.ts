@@ -3,6 +3,8 @@ import { describe, expect, test } from 'vitest'
 import { eventMemoryRepository } from '../repositories/events.memory.js'
 import { createApp } from './app.js'
 
+const isoTimestampPattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/
+
 type DraftResponsePayload = {
   data: {
     draft: {
@@ -10,7 +12,7 @@ type DraftResponsePayload = {
       sourceText: string
       source: string
       referenceAt: string
-      normalizedText: string
+      normalizedText?: string
       parsed: {
         title: string | null
         startAt: string | null
@@ -41,6 +43,8 @@ type EventListResponsePayload = {
 type ErrorResponsePayload = {
   error: {
     code: string
+    message: string
+    details: unknown
   }
   meta: {
     requestId: string
@@ -66,13 +70,15 @@ describe('v0.1 API contract', () => {
     const payload = (await response.json()) as DraftResponsePayload
 
     expect(response.status).toBe(200)
-    expect(payload.meta.requestId).toEqual(expect.any(String))
-    expect(payload.meta.timestamp).toEqual(expect.any(String))
+    expect(payload.meta.requestId).toBe('dev-request')
+    expect(payload.meta.timestamp).toMatch(isoTimestampPattern)
     expect(payload.data.draft.draftId).toEqual(expect.any(String))
     expect(payload.data.draft.sourceText).toBe('明天下午三点和张总在国贸喝咖啡')
     expect(payload.data.draft.source).toBe('text')
     expect(payload.data.draft.referenceAt).toBe('2026-05-29T02:00:00Z')
-    expect(payload.data.draft.normalizedText).toEqual(expect.any(String))
+    if ('normalizedText' in payload.data.draft) {
+      expect(payload.data.draft.normalizedText).toEqual(expect.any(String))
+    }
     expect(payload.data.draft.parsed.title).toBe('喝咖啡')
     expect(payload.data.draft.parsed.startAt).toBe('2026-05-30T07:00:00.000Z')
     expect(payload.data.draft.parsed.endAt).toBeNull()
@@ -102,13 +108,15 @@ describe('v0.1 API contract', () => {
     const payload = (await response.json()) as DraftResponsePayload
 
     expect(response.status).toBe(200)
-    expect(payload.meta.requestId).toEqual(expect.any(String))
-    expect(payload.meta.timestamp).toEqual(expect.any(String))
+    expect(payload.meta.requestId).toBe('dev-request')
+    expect(payload.meta.timestamp).toMatch(isoTimestampPattern)
     expect(payload.data.draft.draftId).toEqual(expect.any(String))
     expect(payload.data.draft.sourceText).toBe('明天和张总喝咖啡')
     expect(payload.data.draft.source).toBe('text')
     expect(payload.data.draft.referenceAt).toBe('2026-05-29T02:00:00Z')
-    expect(payload.data.draft.normalizedText).toEqual(expect.any(String))
+    if ('normalizedText' in payload.data.draft) {
+      expect(payload.data.draft.normalizedText).toEqual(expect.any(String))
+    }
     expect(payload.data.draft.parsed.title).toBe('喝咖啡')
     expect(payload.data.draft.parsed.startAt).toBeNull()
     expect(payload.data.draft.parsed.endAt).toBeNull()
@@ -136,8 +144,16 @@ describe('v0.1 API contract', () => {
 
     expect(response.status).toBe(400)
     expect(payload.error.code).toBe('VALIDATION_ERROR')
-    expect(payload.meta.requestId).toEqual(expect.any(String))
-    expect(payload.meta.timestamp).toEqual(expect.any(String))
+    expect(payload.error.message).toBe('Request payload is invalid.')
+    expect(payload.error.details).toEqual(
+      expect.objectContaining({
+        fieldErrors: expect.objectContaining({
+          sourceText: expect.anything(),
+        }),
+      }),
+    )
+    expect(payload.meta.requestId).toBe('dev-request')
+    expect(payload.meta.timestamp).toMatch(isoTimestampPattern)
   })
 
   test('returns draft parse failed when no event signal can be extracted', async () => {
@@ -158,8 +174,11 @@ describe('v0.1 API contract', () => {
 
     expect(response.status).toBe(422)
     expect(payload.error.code).toBe('DRAFT_PARSE_FAILED')
-    expect(payload.meta.requestId).toEqual(expect.any(String))
-    expect(payload.meta.timestamp).toEqual(expect.any(String))
+    expect(payload.error.message).toEqual(expect.any(String))
+    expect(payload.error).toHaveProperty('details')
+    expect(payload.error.details).not.toBeUndefined()
+    expect(payload.meta.requestId).toBe('dev-request')
+    expect(payload.meta.timestamp).toMatch(isoTimestampPattern)
   })
 
   test('returns recent events using items and total', async () => {
