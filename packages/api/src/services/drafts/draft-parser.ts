@@ -25,8 +25,9 @@ type Span = {
   end: number
 }
 
-type ParticipantMatch = Span & {
-  value: string
+type ParticipantMatch = {
+  consumedSpan: Span
+  values: string[]
 }
 
 type ParseDraftFieldsInput = {
@@ -34,6 +35,54 @@ type ParseDraftFieldsInput = {
   timezone: string
   referenceAt: string
 }
+
+type TimeExtraction = {
+  startAt: string | null
+  endAt: string | null
+  consumedSpan: Span | null
+}
+
+type ExtractionResult = {
+  value: string | null
+  consumedSpan: Span | null
+}
+
+const punctuationBoundaryPattern = /[ ,，。；;：:]/u
+const timeBoundaryPattern = /^(?:今天|明天|后天|今晚|今早|今晨|上午|中午|下午|晚上|凌晨|本周|下周|周[一二三四五六日天]?|星期[一二三四五六日天]?|礼拜[一二三四五六日天]?|\d+[点:\-]|\d+月|\d+号|[零〇一二两三四五六七八九十]+点)/u
+const triggerBoundaryPattern = /^(?:在|到|去|于|和|跟|约|见|找|与|同)/u
+const locationStopPhrases = [
+  '喝咖啡',
+  '喝茶',
+  '开会',
+  '吃饭',
+  '出差',
+  '讨论',
+  '沟通',
+  '复盘',
+  '汇报',
+  '演示',
+  '培训',
+  '看电影',
+  '通话',
+  '打电话',
+  '见面',
+  '约聊',
+  '过方案',
+  '一起',
+]
+const participantStopPhrases = [
+  ...locationStopPhrases,
+  '和',
+  '跟',
+  '与',
+  '同',
+]
+const titleCleanupPatterns = [
+  /(?:^|\s)(?:和|跟|约|见|找|在|到|去|于|与|同|一起)(?=\s|$)/gu,
+  /\s+/gu,
+]
+const titleLeadingTokenPattern = /^(?:和|跟|约|见|找|在|到|去|于|与|同|一起)\s*/u
+const titleTrailingTokenPattern = /\s*(?:和|跟|约|见|找|在|到|去|于|与|同|一起)$/u
 
 export class DraftParseError extends Error {
   code = 'DRAFT_PARSE_FAILED' as const
@@ -64,7 +113,7 @@ export function parseDraftFields(input: ParseDraftFieldsInput): ParsedDraftField
   const warnings: string[] = []
   const consumedSpans: Span[] = []
 
-  const timeResult = extractTime(normalizedText, input.referenceAt)
+  const timeResult = extractTime(normalizedText, input.referenceAt, input.timezone)
   if (timeResult.consumedSpan) {
     consumedSpans.push(timeResult.consumedSpan)
   }
@@ -75,10 +124,10 @@ export function parseDraftFields(input: ParseDraftFieldsInput): ParsedDraftField
   }
 
   const participantMatches = extractParticipants(normalizedText, consumedSpans)
-  consumedSpans.push(...participantMatches.map(({ start, end }) => ({ start, end })))
+  consumedSpans.push(...participantMatches.map((match) => match.consumedSpan))
 
   const title = deriveTitle(normalizedText, consumedSpans)
-  const participants = participantMatches.map((match) => match.value)
+  const participants = participantMatches.flatMap((match) => match.values)
   const missingFields = computeMissingFields(title, timeResult.startAt)
   const clarificationPrompt = buildClarificationPrompt(missingFields)
 
@@ -111,9 +160,13 @@ function normalizeText(sourceText: string): string {
     .replace(/([零〇一二两三四五六七八九])点/gu, (_, digit: string) => `${chineseDigitMap[digit] ?? digit}点`)
 }
 
-function extractTime(text: string, referenceAt: string) {
-  const referenceDate = new Date(referenceAt)
-  const [result] = chrono.zh.parse(text, referenceDate, { forwardDate: true })
+function extractTime(text: string, referenceAt: string, timezone: string): TimeExtraction {
+  const instant = new Date(referenceAt)
+  const [result] = chrono.zh.parse(
+    text,
+    { instant, timezone: getTimezoneOffsetMinutes(instant, timezone) },
+    { forwardDate: true },
+  )
 
   if (!result) {
     return {
@@ -124,34 +177,37 @@ function extractTime(text: string, referenceAt: string) {
   }
 
   const hasExplicitHour = result.start.isCertain('hour')
-  const hasDateSignal = result.start.isCertain('day') || result.start.isCertain('weekday')
 
   return {
     startAt: hasExplicitHour ? result.start.date().toISOString() : null,
     endAt: result.end?.isCertain('hour') ? result.end.date().toISOString() : null,
-    consumedSpan: hasDateSignal
-      ? {
-          start: result.index,
-          end: result.index + result.text.length,
-        }
-      : null,
+    consumedSpan: {
+      start: result.index,
+      end: result.index + result.text.length,
+    },
   }
 }
 
-function extractLocation(text: string, consumedSpans: Span[]) {
-  const locationPattern = /(?:在|到|去|于)([^和跟约见找叫把给跟与同,，。；;：:\s]{1,20})/gu
+function extractLocation(text: string, consumedSpans: Span[]): ExtractionResult {
+  const locationPattern = /(?:在|到|去|于)/gu
 
   for (const match of text.matchAll(locationPattern)) {
-    const captured = match[1]?.trim()
-    const start = (match.index ?? 0) + match[0].indexOf(captured)
-    const end = start + captured.length
-    if (!captured || overlaps({ start, end }, consumedSpans)) {
+    const triggerStart = match.index ?? 0
+    const valueStart = triggerStart + match[0].length
+    const consumedSpan = collectEntitySpan(text, valueStart, locationStopPhrases)
+    if (!consumedSpan || overlaps(consumedSpan, consumedSpans)) {
+      continue
+    }
+
+    const captured = text.slice(consumedSpan.start, consumedSpan.end)
+    const value = cleanupEntity(captured)
+    if (!value) {
       continue
     }
 
     return {
-      value: cleanupEntity(captured),
-      consumedSpan: { start, end },
+      value,
+      consumedSpan,
     }
   }
 
@@ -162,23 +218,23 @@ function extractLocation(text: string, consumedSpans: Span[]) {
 }
 
 function extractParticipants(text: string, consumedSpans: Span[]): ParticipantMatch[] {
-  const participantPattern = /(?:和|跟|约|见|找)([^在到去于,，。；;：:\s]{1,20})/gu
+  const participantPattern = /(?:和|跟|约|见|找)/gu
   const participants: ParticipantMatch[] = []
 
   for (const match of text.matchAll(participantPattern)) {
-    const captured = match[1]?.trim()
-    const start = (match.index ?? 0) + match[0].indexOf(captured)
-    const end = start + captured.length
-    if (!captured || overlaps({ start, end }, consumedSpans)) {
+    const triggerStart = match.index ?? 0
+    const valueStart = triggerStart + match[0].length
+    const consumedSpan = collectEntitySpan(text, valueStart, participantStopPhrases)
+    if (!consumedSpan || overlaps(consumedSpan, consumedSpans)) {
       continue
     }
 
-    const value = cleanupEntity(captured)
-    if (!value) {
+    const values = splitParticipants(text.slice(consumedSpan.start, consumedSpan.end))
+    if (values.length === 0) {
       continue
     }
 
-    participants.push({ start, end, value })
+    participants.push({ consumedSpan, values })
   }
 
   return participants
@@ -196,10 +252,14 @@ function deriveTitle(text: string, consumedSpans: Span[]): string | null {
   }
 
   const residual = characters.join('')
-  const cleaned = residual
-    .replace(/[和跟约见找在到去于同与]/gu, ' ')
-    .replace(/\s+/gu, ' ')
-    .trim()
+  let cleaned = residual
+  for (const pattern of titleCleanupPatterns) {
+    cleaned = cleaned.replace(pattern, ' ')
+  }
+  cleaned = cleaned.trim()
+  while (titleLeadingTokenPattern.test(cleaned) || titleTrailingTokenPattern.test(cleaned)) {
+    cleaned = cleaned.replace(titleLeadingTokenPattern, '').replace(titleTrailingTokenPattern, '').trim()
+  }
 
   return cleaned.length > 0 ? cleaned : null
 }
@@ -261,5 +321,76 @@ function overlaps(span: Span, consumedSpans: Span[]) {
 }
 
 function cleanupEntity(value: string) {
-  return value.replace(/[和跟约见找在到去于,，。；;：:]+$/gu, '').trim() || null
+  return value.replace(/[ ,，。；;：:]+$/gu, '').trim() || null
+}
+
+function splitParticipants(value: string) {
+  return value
+    .split(/[和跟与同]/u)
+    .map((part) => cleanupEntity(part))
+    .filter((part): part is string => part !== null)
+}
+
+function collectEntitySpan(text: string, valueStart: number, stopPhrases: string[]) {
+  let start = valueStart
+  while (start < text.length && text[start] === ' ') {
+    start += 1
+  }
+
+  if (start >= text.length) {
+    return null
+  }
+
+  let end = start
+  while (end < text.length) {
+    const slice = text.slice(end)
+    if (punctuationBoundaryPattern.test(text[end])) {
+      break
+    }
+
+    if (end > start && triggerBoundaryPattern.test(slice)) {
+      break
+    }
+
+    if (end > start && timeBoundaryPattern.test(slice)) {
+      break
+    }
+
+    if (stopPhrases.some((phrase) => slice.startsWith(phrase))) {
+      break
+    }
+
+    end += 1
+  }
+
+  return end > start ? { start, end } : null
+}
+
+function getTimezoneOffsetMinutes(instant: Date, timezone: string) {
+  try {
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    })
+    const parts = formatter.formatToParts(instant)
+    const values = Object.fromEntries(parts.map((part) => [part.type, part.value]))
+    const zonedTimestamp = Date.UTC(
+      Number(values.year),
+      Number(values.month) - 1,
+      Number(values.day),
+      Number(values.hour),
+      Number(values.minute),
+      Number(values.second),
+    )
+
+    return Math.round((zonedTimestamp - instant.getTime()) / 60000)
+  } catch {
+    return 0
+  }
 }
