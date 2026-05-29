@@ -6,9 +6,16 @@ import { createApp } from './app.js'
 type DraftResponsePayload = {
   data: {
     draft: {
+      draftId: string
+      sourceText: string
+      source: string
+      referenceAt: string
+      normalizedText: string
       parsed: {
         title: string | null
         startAt: string | null
+        endAt: string | null
+        timezone: string
         location: string | null
         participants: string[]
       }
@@ -17,6 +24,10 @@ type DraftResponsePayload = {
       canSave: boolean
       clarificationPrompt: string | null
     }
+  }
+  meta: {
+    requestId: string
+    timestamp: string
   }
 }
 
@@ -30,6 +41,10 @@ type EventListResponsePayload = {
 type ErrorResponsePayload = {
   error: {
     code: string
+  }
+  meta: {
+    requestId: string
+    timestamp: string
   }
 }
 
@@ -51,8 +66,17 @@ describe('v0.1 API contract', () => {
     const payload = (await response.json()) as DraftResponsePayload
 
     expect(response.status).toBe(200)
+    expect(payload.meta.requestId).toEqual(expect.any(String))
+    expect(payload.meta.timestamp).toEqual(expect.any(String))
+    expect(payload.data.draft.draftId).toEqual(expect.any(String))
+    expect(payload.data.draft.sourceText).toBe('明天下午三点和张总在国贸喝咖啡')
+    expect(payload.data.draft.source).toBe('text')
+    expect(payload.data.draft.referenceAt).toBe('2026-05-29T02:00:00Z')
+    expect(payload.data.draft.normalizedText).toEqual(expect.any(String))
     expect(payload.data.draft.parsed.title).toBe('喝咖啡')
     expect(payload.data.draft.parsed.startAt).toBe('2026-05-30T07:00:00.000Z')
+    expect(payload.data.draft.parsed.endAt).toBeNull()
+    expect(payload.data.draft.parsed.timezone).toBe('Asia/Shanghai')
     expect(payload.data.draft.parsed.location).toBe('国贸')
     expect(payload.data.draft.parsed.participants).toEqual(['张总'])
     expect(payload.data.draft.missingFields).toEqual([])
@@ -78,11 +102,42 @@ describe('v0.1 API contract', () => {
     const payload = (await response.json()) as DraftResponsePayload
 
     expect(response.status).toBe(200)
+    expect(payload.meta.requestId).toEqual(expect.any(String))
+    expect(payload.meta.timestamp).toEqual(expect.any(String))
+    expect(payload.data.draft.draftId).toEqual(expect.any(String))
+    expect(payload.data.draft.sourceText).toBe('明天和张总喝咖啡')
+    expect(payload.data.draft.source).toBe('text')
+    expect(payload.data.draft.referenceAt).toBe('2026-05-29T02:00:00Z')
+    expect(payload.data.draft.normalizedText).toEqual(expect.any(String))
     expect(payload.data.draft.parsed.title).toBe('喝咖啡')
     expect(payload.data.draft.parsed.startAt).toBeNull()
+    expect(payload.data.draft.parsed.endAt).toBeNull()
+    expect(payload.data.draft.parsed.timezone).toBe('Asia/Shanghai')
     expect(payload.data.draft.missingFields).toEqual(['startAt'])
     expect(payload.data.draft.canSave).toBe(false)
     expect(payload.data.draft.clarificationPrompt).toBe('请补充开始时间。')
+  })
+
+  test('rejects draft creation when sourceText is empty', async () => {
+    eventMemoryRepository.reset()
+    const app = createApp()
+
+    const response = await app.request('/api/v1/drafts', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        sourceText: '',
+        timezone: 'Asia/Shanghai',
+        referenceAt: '2026-05-29T02:00:00Z',
+        source: 'text',
+      }),
+    })
+    const payload = (await response.json()) as ErrorResponsePayload
+
+    expect(response.status).toBe(400)
+    expect(payload.error.code).toBe('VALIDATION_ERROR')
+    expect(payload.meta.requestId).toEqual(expect.any(String))
+    expect(payload.meta.timestamp).toEqual(expect.any(String))
   })
 
   test('returns draft parse failed when no event signal can be extracted', async () => {
@@ -103,6 +158,8 @@ describe('v0.1 API contract', () => {
 
     expect(response.status).toBe(422)
     expect(payload.error.code).toBe('DRAFT_PARSE_FAILED')
+    expect(payload.meta.requestId).toEqual(expect.any(String))
+    expect(payload.meta.timestamp).toEqual(expect.any(String))
   })
 
   test('returns recent events using items and total', async () => {
