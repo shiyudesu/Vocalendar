@@ -81,8 +81,7 @@ const titleCleanupPatterns = [
   /(?:^|\s)(?:和|跟|约|见|找|在|到|去|于|与|同|一起)(?=\s|$)/gu,
   /\s+/gu,
 ]
-const titleLeadingTokenPattern = /^(?:和|跟|约|见|找|在|到|去|于|与|同|一起)\s*/u
-const titleTrailingTokenPattern = /\s*(?:和|跟|约|见|找|在|到|去|于|与|同|一起)$/u
+const titleAffixTokens = ['和', '跟', '约', '见', '找', '在', '到', '去', '于', '与', '同', '一起']
 
 export class DraftParseError extends Error {
   code = 'DRAFT_PARSE_FAILED' as const
@@ -229,6 +228,11 @@ function extractParticipants(text: string, consumedSpans: Span[]): ParticipantMa
       continue
     }
 
+    const triggeredText = text.slice(triggerStart, consumedSpan.end)
+    if (standaloneSignalPattern.test(triggeredText)) {
+      continue
+    }
+
     const values = splitParticipants(text.slice(consumedSpan.start, consumedSpan.end))
     if (values.length === 0) {
       continue
@@ -256,10 +260,7 @@ function deriveTitle(text: string, consumedSpans: Span[]): string | null {
   for (const pattern of titleCleanupPatterns) {
     cleaned = cleaned.replace(pattern, ' ')
   }
-  cleaned = cleaned.trim()
-  while (titleLeadingTokenPattern.test(cleaned) || titleTrailingTokenPattern.test(cleaned)) {
-    cleaned = cleaned.replace(titleLeadingTokenPattern, '').replace(titleTrailingTokenPattern, '').trim()
-  }
+  cleaned = stripOptionalTitleAffixes(cleaned.trim())
 
   return cleaned.length > 0 ? cleaned : null
 }
@@ -393,4 +394,42 @@ function getTimezoneOffsetMinutes(instant: Date, timezone: string) {
   } catch {
     return 0
   }
+}
+
+function stripOptionalTitleAffixes(value: string) {
+  let cleaned = value
+
+  for (;;) {
+    let next = cleaned
+
+    for (const token of titleAffixTokens) {
+      if (next.startsWith(token)) {
+        const candidate = next.slice(token.length).trim()
+        if (isBetterTitleCandidate(candidate)) {
+          next = candidate
+          break
+        }
+      }
+    }
+
+    for (const token of titleAffixTokens) {
+      if (next.endsWith(token)) {
+        const candidate = next.slice(0, -token.length).trim()
+        if (isBetterTitleCandidate(candidate)) {
+          next = candidate
+          break
+        }
+      }
+    }
+
+    if (next === cleaned) {
+      return cleaned
+    }
+
+    cleaned = next
+  }
+}
+
+function isBetterTitleCandidate(value: string) {
+  return value.length > 0 && standaloneSignalPattern.test(value)
 }
