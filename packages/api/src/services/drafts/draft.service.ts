@@ -5,7 +5,7 @@ import { eventMemoryRepository } from '../../repositories/events.memory.js'
 export function createDraft(input: CreateDraftRequest): EventDraft {
   const normalizedText = input.sourceText.trim()
   const parsedTitle = normalizedText.replace(/^(明天|今天|后天|下周[一二三四五六日天]?)/, '').trim()
-  const startAt = guessStartAt(input.referenceAt)
+  const startAt = null
   const title = parsedTitle.length > 0 ? parsedTitle : null
   const missingFields = [...(title ? [] : ['title']), ...(startAt ? [] : ['startAt'])]
   const draft: EventDraft = {
@@ -29,14 +29,4 @@ export function createDraft(input: CreateDraftRequest): EventDraft {
   }
 
   return eventMemoryRepository.saveDraft(draft)
-}
-
-function guessStartAt(referenceAt: string) {
-  const date = new Date(referenceAt)
-  if (Number.isNaN(date.getTime())) {
-    return null
-  }
-
-  date.setUTCHours(date.getUTCHours() + 1, 0, 0, 0)
-  return date.toISOString()
 }

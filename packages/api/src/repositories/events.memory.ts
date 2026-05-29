@@ -21,4 +21,9 @@ export const eventMemoryRepository = {
   listRecentEvents(limit: number) {
     return events.slice(0, limit)
   },
+
+  reset() {
+    drafts.clear()
+    events.length = 0
+  },
 }
