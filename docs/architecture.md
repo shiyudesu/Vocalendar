@@ -32,7 +32,7 @@
 | 本地数据 | SQLite | 适合原型和单机开发 |
 | 共享/生产数据 | PostgreSQL | 适合多人环境和后续移动端共用后端 |
 | 测试 | Vitest + React Testing Library + Playwright | 覆盖单元、组件和端到端验证 |
-| 代码质量 | ESLint + Prettier | 统一风格，降低 AI 和多人协作噪音 |
+| 代码质量 | Rslint + Oxfmt | Rslint 同时承担 lint 与 TypeScript type-check；Oxfmt 负责格式化、import 排序和 Tailwind class 排序，统一风格并降低 AI 和多人协作噪音 |
 
 ## 3.2 输入与解析策略
 
@@ -121,7 +121,7 @@ pnpm-workspace.yaml
 - `packages/mobile/` 放 `Capacitor` 配置和原生工程壳体，不重复实现后端契约
 - `packages/schemas/` 放前后端共享的 Zod schema
 - `packages/shared/` 只放跨应用共享的稳定类型与工具，不放端专属业务逻辑
-- `packages/config/` 放共享的 TypeScript、ESLint、Prettier 等工程配置
+- `packages/config/` 放共享的 TypeScript、Rslint、Oxfmt 等工程配置
 
 ---
 
