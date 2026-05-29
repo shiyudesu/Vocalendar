@@ -1,0 +1,73 @@
+# Project-specific
+superpowers/
+.agents
+.codex
+
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Monorepo build outputs
+dist/
+build/
+out/
+.next/
+
+# TypeScript
+*.tsbuildinfo
+tsc-out/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# Environment variables
+.env
+.env.*
+!.env.example
+!.env.template
+
+# Testing
+coverage/
+.nyc_output/
+
+# IDE / Editor
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# OS
+Thumbs.db
+
+# SQLite databases
+*.db
+*.db-journal
+*.sqlite
+*.sqlite-journal
+
+# Capacitor / Mobile
+apps/mobile/ios/App/public/
+apps/mobile/android/app/src/main/assets/public/
+apps/mobile/android/capacitor-cordova-android-plugins/
+
+# Fastify / API temp
+temp/
+tmp/
+
+# Misc
+.cache/
+.parcel-cache/
+.eslintcache
+.prettiercache
