@@ -96,6 +96,7 @@ packages/
       lib/
     vite.config.ts
   mobile/
+    AGENTS.md
     capacitor.config.ts
     ios/
     android/
@@ -118,7 +119,7 @@ turbo.json
 - `packages/api/src/services/` 放业务逻辑，不允许依赖前端页面组件
 - `packages/api/src/repositories/` 负责数据库读写
 - `packages/web/` 放 Vite React SPA、浏览器入口和前端交互逻辑，不放服务端业务逻辑
-- `packages/mobile/` 放 `Capacitor` 配置和原生工程壳体，不重复实现后端契约
+- `packages/mobile/` 放 `Capacitor` 配置和原生工程壳体，`webDir` 指向 `packages/web` 的构建产物，不重复实现 Web UI 或后端契约
 - `packages/schemas/` 放前后端共享的 Zod schema
 - `packages/shared/` 只放跨应用共享的稳定类型与工具，不放端专属业务逻辑
 - `packages/config/` 放共享的 TypeScript、Rslint、Oxfmt 等工程配置

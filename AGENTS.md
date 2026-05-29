@@ -54,6 +54,7 @@
 - 保持实现与 `docs/architecture.md` 的目录规范一致
 - 保持接口行为与 `docs/api-spec.md` 一致
 - 本地端口约定：`packages/web` 使用 `8060`，`packages/api` 使用 `8061`
+- `packages/mobile` 使用 Capacitor 承载 `packages/web` 的构建产物，并通过配置化 API base URL 调用 API
 - Web 与移动端通过配置化 API base URL 调用 API
 - 不在 UI 组件中写复杂业务规则
 - 不跳过输入校验、错误码设计和基本测试

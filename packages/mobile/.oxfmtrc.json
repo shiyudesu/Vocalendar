@@ -1,0 +1,10 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "singleQuote": true,
+  "semi": false,
+  "trailingComma": "all",
+  "printWidth": 100,
+  "sortImports": true,
+  "sortTailwindcss": true,
+  "ignorePatterns": ["android/**", "ios/**", "dist/**", "node_modules/**"]
+}
