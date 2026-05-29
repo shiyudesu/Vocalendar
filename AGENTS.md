@@ -53,6 +53,8 @@
 
 - 保持实现与 `docs/architecture.md` 的目录规范一致
 - 保持接口行为与 `docs/api-spec.md` 一致
+- 本地端口约定：`packages/web` 使用 `8060`，`packages/api` 使用 `8061`
+- Web 与移动端通过配置化 API base URL 调用 API
 - 不在 UI 组件中写复杂业务规则
 - 不跳过输入校验、错误码设计和基本测试
 - 不引入与当前版本无关的基础设施复杂度

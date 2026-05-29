@@ -1,0 +1,23 @@
+{
+  "name": "@vocalendar/schemas",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsdown src/index.ts --format esm --platform neutral --out-dir dist --dts --clean",
+    "check": "rslint --type-check . && oxfmt --check .",
+    "fix": "rslint --type-check --fix . && oxfmt ."
+  },
+  "dependencies": {
+    "zod": "^4.2.1"
+  },
+  "devDependencies": {
+    "@rslint/core": "^0.5.3",
+    "oxfmt": "^0.52.0",
+    "tsdown": "^0.18.0",
+    "typescript": "~6.0.2"
+  }
+}
