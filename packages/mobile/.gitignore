@@ -1,0 +1,8 @@
+node_modules
+android/app/build
+ios/App/build
+android/app/src/main/assets/public
+ios/App/App/public
+!android/app/src/main/assets/
+!android/app/src/main/assets/capacitor.config.json
+!android/app/src/main/assets/capacitor.plugins.json

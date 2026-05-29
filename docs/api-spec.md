@@ -42,7 +42,7 @@
 - 字段命名：请求与响应统一使用 `camelCase`
 - 时间存储：UTC ISO 8601 字符串
 - 时区传递：使用 IANA 时区，例如 `Asia/Shanghai`
-- 客户端复用：`Next.js Web` 前端与后续 `Capacitor` 移动端必须调用同一套 HTTP API，不按客户端类型拆分独立契约
+- 客户端复用：`packages/web` 的 Vite React Web 前端通过配置化 API base URL 跨域调用 `packages/api` HTTP API；后续 `Capacitor` 移动端必须调用同一套部署后的 HTTP API，不按客户端类型拆分独立契约
 - 不兼容变更：进入新的主版本路径，例如 `/api/v2`
 
 ### 3.2 鉴权阶段约定

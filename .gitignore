@@ -68,6 +68,9 @@ tmp/
 
 # Misc
 .cache/
+.turbo/
 .parcel-cache/
 .eslintcache
 .prettiercache
+.output/
+.nitro/

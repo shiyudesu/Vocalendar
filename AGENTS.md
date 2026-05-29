@@ -53,6 +53,9 @@
 
 - 保持实现与 `docs/architecture.md` 的目录规范一致
 - 保持接口行为与 `docs/api-spec.md` 一致
+- 本地端口约定：`packages/web` 使用 `8060`，`packages/api` 使用 `8061`
+- `packages/mobile` 使用 Capacitor 承载 `packages/web` 的构建产物，并通过配置化 API base URL 调用 API
+- Web 与移动端通过配置化 API base URL 调用 API
 - 不在 UI 组件中写复杂业务规则
 - 不跳过输入校验、错误码设计和基本测试
 - 不引入与当前版本无关的基础设施复杂度
@@ -70,6 +73,8 @@
 
 - 文档改动：至少检查文件结构、命名和引用路径正确
 - 代码改动：至少运行与改动直接相关的测试、类型检查、构建或手动验证
+- `packages/web` 的质量检查统一运行 `pnpm check`，该命令必须包含 TypeScript 类型检查；自动修复统一运行 `pnpm fix`
+- 不要新增绕过 `pnpm check` / `pnpm fix` 的零散 lint、format 或 typecheck 脚本
 - 不要在未验证的情况下宣称“完成”或“已通过”
 
 如果仓库尚未建立完整脚本，必须明确说明未能运行哪些验证。
@@ -96,7 +101,7 @@ chore(deps): 升级 drizzle-orm 至 0.30.x
 | `feat` | 新功能 | 新增 API 路由、页面组件 |
 | `fix` | Bug 修复 | 修复解析错误、UI 显示异常 |
 | `docs` | 仅文档变动 | 更新 `prd.md`、`api-spec.md`、README |
-| `style` | 不影响代码逻辑的格式变动 | Prettier、ESLint 自动格式化 |
+| `style` | 不影响代码逻辑的格式变动 | Oxfmt、Rslint 自动格式化 |
 | `refactor` | 重构（既不是 feat 也不是 fix） | 函数提取、目录迁移、重命名 |
 | `perf` | 性能优化 | 减少重复查询、优化 bundle 体积 |
 | `test` | 测试相关 | 新增/修改单元测试、e2e 测试 |
@@ -108,8 +113,8 @@ chore(deps): 升级 drizzle-orm 至 0.30.x
 
 作用域为可选项，用于指明改动的主要模块。推荐值：
 
-- `api` — Fastify 服务层、路由
-- `web` — Next.js 前端页面与组件
+- `api` — Hono API routes、服务层
+- `web` — Vite React 前端页面与组件
 - `mobile` — Capacitor 移动端壳体
 - `schemas` — `packages/schemas` 共享 Zod schema
 - `shared` — `packages/shared` 共享类型与工具

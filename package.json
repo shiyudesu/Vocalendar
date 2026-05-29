@@ -1,0 +1,15 @@
+{
+  "name": "vocalendar-monorepo",
+  "version": "0.0.0",
+  "private": true,
+  "packageManager": "pnpm@11.4.0",
+  "scripts": {
+    "dev": "turbo run dev --parallel",
+    "build": "turbo run build",
+    "check": "turbo run check",
+    "fix": "turbo run fix"
+  },
+  "devDependencies": {
+    "turbo": "^2.9.15"
+  }
+}

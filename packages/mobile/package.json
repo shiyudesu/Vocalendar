@@ -1,0 +1,27 @@
+{
+  "name": "@vocalendar/mobile",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "capacitor sync",
+    "check": "rslint --type-check . && oxfmt --check .",
+    "fix": "rslint --type-check --fix . && oxfmt .",
+    "sync": "capacitor sync",
+    "open:ios": "capacitor open ios",
+    "open:android": "capacitor open android"
+  },
+  "dependencies": {
+    "@capacitor/core": "^8.3.4"
+  },
+  "devDependencies": {
+    "@capacitor/android": "^8.3.4",
+    "@capacitor/cli": "^8.3.4",
+    "@capacitor/ios": "^8.3.4",
+    "@rslint/core": "^0.5.3",
+    "@types/node": "^25.9.1",
+    "@vocalendar/web": "workspace:*",
+    "oxfmt": "^0.52.0",
+    "typescript": "~6.0.3"
+  }
+}
