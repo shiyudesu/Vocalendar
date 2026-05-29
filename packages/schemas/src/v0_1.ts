@@ -46,7 +46,12 @@ export const createDraftRequestSchema = z.object({
   source: eventSourceSchema.default('text'),
 })
 
+export const createEventRequestSchema = z.object({
+  draftId: z.string().min(1),
+})
+
 export type EventDraftParsed = z.infer<typeof eventDraftParsedSchema>
 export type EventDraft = z.infer<typeof eventDraftSchema>
 export type Event = z.infer<typeof eventSchema>
 export type CreateDraftRequest = z.infer<typeof createDraftRequestSchema>
+export type CreateEventRequest = z.infer<typeof createEventRequestSchema>
