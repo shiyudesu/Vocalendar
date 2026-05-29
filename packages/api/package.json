@@ -7,6 +7,7 @@
     "dev": "tsx watch --clear-screen=false src/index.ts",
     "build": "tsdown src/index.ts --format esm --platform node --out-dir dist --clean",
     "check": "rslint --type-check . && oxfmt --check .",
+    "test": "vitest run",
     "fix": "rslint --type-check --fix . && oxfmt ."
   },
   "dependencies": {
@@ -20,6 +21,7 @@
     "oxfmt": "^0.52.0",
     "tsdown": "^0.22.0",
     "tsx": "^4.22.3",
-    "typescript": "~6.0.3"
+    "typescript": "~6.0.3",
+    "vitest": "^4.0.15"
   }
 }

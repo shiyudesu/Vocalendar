@@ -9,6 +9,7 @@
   "scripts": {
     "build": "tsdown src/index.ts --format esm --platform neutral --out-dir dist --dts --clean",
     "check": "rslint --type-check . && oxfmt --check .",
+    "test": "vitest run",
     "fix": "rslint --type-check --fix . && oxfmt ."
   },
   "dependencies": {
@@ -18,6 +19,7 @@
     "@rslint/core": "^0.5.3",
     "oxfmt": "^0.52.0",
     "tsdown": "^0.22.0",
-    "typescript": "~6.0.3"
+    "typescript": "~6.0.3",
+    "vitest": "^4.0.15"
   }
 }
