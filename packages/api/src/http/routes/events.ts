@@ -1,4 +1,4 @@
-import { createEventRequestSchema } from '@vocalendar/schemas'
+import { createEventRequestSchema, listEventsQuerySchema } from '@vocalendar/schemas'
 import { Hono } from 'hono'
 
 import { createEventFromDraft, listRecentEvents } from '../../services/events/event.service.js'
@@ -7,10 +7,17 @@ import { ok, validationError } from '../utils/responses.js'
 export const eventRoutes = new Hono()
 
 eventRoutes.get('/', (c) => {
-  const limit = Number(c.req.query('limit') ?? 5)
+  const result = listEventsQuerySchema.safeParse(c.req.query())
+
+  if (!result.success) {
+    return validationError(c, result.error.flatten())
+  }
+
+  const events = listRecentEvents(result.data.limit)
 
   return ok(c, {
-    events: listRecentEvents(Number.isFinite(limit) ? limit : 5),
+    items: events,
+    total: events.length,
   })
 })
 

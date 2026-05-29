@@ -50,8 +50,59 @@ export const createEventRequestSchema = z.object({
   draftId: z.string().min(1),
 })
 
+export const updateDraftFieldsSchema = z
+  .object({
+    title: z.string().min(1).nullable().optional(),
+    startAt: z.string().datetime().nullable().optional(),
+    endAt: z.string().datetime().nullable().optional(),
+    timezone: z.string().min(1).optional(),
+    location: z.string().min(1).nullable().optional(),
+    participants: z.array(z.string().min(1)).optional(),
+  })
+  .strict()
+  .refine((fields) => Object.keys(fields).length > 0, {
+    message: 'At least one draft field must be provided.',
+  })
+
+export const updateDraftRequestSchema = z
+  .object({
+    userInput: z.string().trim().min(1).optional(),
+    referenceAt: z.string().datetime().optional(),
+    fields: updateDraftFieldsSchema.optional(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (!value.userInput && !value.fields) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Either userInput or fields must be provided.',
+      })
+    }
+
+    if (value.userInput && !value.referenceAt) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'referenceAt is required when userInput is provided.',
+        path: ['referenceAt'],
+      })
+    }
+  })
+
+export const listEventsQuerySchema = z.object({
+  mode: z.literal('recent').default('recent'),
+  limit: z
+    .preprocess(
+      (value) => (value === undefined ? undefined : Number(value)),
+      z.number().int().min(1).default(5),
+    )
+    .transform((limit) => Math.min(limit, 10)),
+})
+
 export type EventDraftParsed = z.infer<typeof eventDraftParsedSchema>
 export type EventDraft = z.infer<typeof eventDraftSchema>
 export type Event = z.infer<typeof eventSchema>
 export type CreateDraftRequest = z.infer<typeof createDraftRequestSchema>
 export type CreateEventRequest = z.infer<typeof createEventRequestSchema>
+export type UpdateDraftFields = z.infer<typeof updateDraftFieldsSchema>
+export type UpdateDraftRequest = z.infer<typeof updateDraftRequestSchema>
+export type ListEventsQuery = z.infer<typeof listEventsQuerySchema>
