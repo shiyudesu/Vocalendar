@@ -71,3 +71,5 @@ tmp/
 .parcel-cache/
 .eslintcache
 .prettiercache
+.output/
+.nitro/
