@@ -12,12 +12,12 @@
     "fix": "rslint --type-check --fix . && oxfmt ."
   },
   "dependencies": {
-    "zod": "^4.2.1"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@rslint/core": "^0.5.3",
     "oxfmt": "^0.52.0",
-    "tsdown": "^0.18.0",
-    "typescript": "~6.0.2"
+    "tsdown": "^0.22.0",
+    "typescript": "~6.0.3"
   }
 }

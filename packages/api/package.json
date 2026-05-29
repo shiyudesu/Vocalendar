@@ -15,10 +15,10 @@
   },
   "devDependencies": {
     "@rslint/core": "^0.5.3",
-    "@types/node": "^24.12.3",
+    "@types/node": "^25.9.1",
     "oxfmt": "^0.52.0",
-    "tsdown": "^0.18.0",
-    "tsx": "^4.20.6",
-    "typescript": "~6.0.2"
+    "tsdown": "^0.22.0",
+    "tsx": "^4.22.3",
+    "typescript": "~6.0.3"
   }
 }
