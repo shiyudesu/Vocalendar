@@ -174,9 +174,8 @@ describe('v0.1 API contract', () => {
 
     expect(response.status).toBe(422)
     expect(payload.error.code).toBe('DRAFT_PARSE_FAILED')
-    expect(payload.error.message).toEqual(expect.any(String))
-    expect(payload.error).toHaveProperty('details')
-    expect(payload.error.details).not.toBeUndefined()
+    expect(payload.error.message).toBe('Source text cannot be parsed into a valid draft.')
+    expect(payload.error.details).toEqual({ sourceText: '啊啊啊' })
     expect(payload.meta.requestId).toBe('dev-request')
     expect(payload.meta.timestamp).toMatch(isoTimestampPattern)
   })
