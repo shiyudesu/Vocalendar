@@ -9,8 +9,8 @@
 ## 2. 架构目标
 
 当前架构需要同时满足四个要求：
-- 支持 `packages/web` 中的 Vite + React + Nitro 全栈应用首发，尽快验证自然语言创建与 CRUD 主流程
-- 在单应用内保持 Client UI、Nitro API、领域服务和持久层边界清晰，方便后续能力扩展
+- 支持 `packages/web` 的 Vite + React 浏览器入口、`packages/api` 的独立 Hono API 服务和后续 `packages/mobile` 的 Capacitor 原生入口，尽快验证自然语言创建与 CRUD 主流程
+- 保持 Client UI、API 服务、领域服务和持久层边界清晰，方便 Web 与移动端复用同一套产品能力
 - 让事件模型、接口契约和解析流程可在 Web 与后续 `Capacitor` 移动端之间复用
 - 在代码量尚小的阶段，用 `pnpm workspace` monorepo 管理全栈 Web 应用与共享契约；当前应用包统一放在 `packages/` 下
 
@@ -25,8 +25,8 @@
 | Web 前端 | Vite + React + TypeScript | 当前仓库已有 `packages/web`，适合轻量快速搭建 SPA，并为后续 `Capacitor` 承载复用前端能力 |
 | 移动端承载 | Capacitor | 在保持前后端分离前提下，渐进把 Web 能力带到移动端 |
 | UI 样式 | Tailwind CSS | 适合快速迭代原型与组件化页面 |
-| API / 服务端 | Nitro + H3 + TypeScript | 作为 Vite 插件接入当前 `packages/web`，用文件路由提供 `/api/*`；适合轻量 REST JSON 服务，并保留部署到 Node、serverless 或 edge-like runtime 的弹性 |
-| Monorepo | pnpm workspace | 统一管理全栈 Web 应用与共享包，降低契约漂移 |
+| API / 服务端 | Hono + TypeScript | `packages/api` 独立提供 `/api/*` HTTP 服务；框架轻量、Web 标准接口友好，便于 Web 与 Capacitor 移动端共用同一套后端契约 |
+| Monorepo | pnpm workspace + Turborepo | 统一管理 API、Web、移动端和共享包，并用 Turbo 调度 dev、build、check、fix 等任务 |
 | 数据校验 | Zod | Web、API 与后续移动端共享 schema，减少契约漂移 |
 | 数据访问 | Drizzle ORM | 结构清晰，适合从 SQLite 平滑迁移到 PostgreSQL |
 | 本地数据 | SQLite | 适合原型和单机开发 |
@@ -42,7 +42,7 @@
 - `v0.1` 不单独做通用 intent classifier；`POST /drafts` 天然表示“创建草稿”意图，领域服务只负责从文本中抽取时间、参与人、地点和标题候选
 - `v0.1` 实体抽取采用纯 TypeScript 规则引擎和 span 消解，不引入通用中文 NLP/NER 库；LLM 辅助解析只在后续版本评估
 - 事件解析应由服务层统一处理，不把规则散落在 UI 组件中
-- Web 前端通过同源 HTTP 调用 Nitro API；后续 `Capacitor` App 调用同一套部署后的 HTTP API，不在客户端内复制解析逻辑
+- Web 前端本地通过配置化 API base URL 跨域调用 `packages/api` 的 HTTP API；后续 `Capacitor` App 通过配置化 API base URL 调用同一套部署后的 HTTP API，不在客户端内复制解析逻辑
 - 后续如果引入外部 ASR/LLM 服务，应保持已有事件草稿接口稳定
 
 ---
@@ -54,7 +54,7 @@
 | 层 | 职责 | 说明 |
 | --- | --- | --- |
 | Client UI | 输入交互、状态反馈、事件确认、列表展示 | 包含 `packages/web` 的 Vite React Web 与后续 `Capacitor` App，不直接操作数据库，不包含复杂业务规则 |
-| Application API | 接收请求、做参数校验、调用领域服务、返回结果 | `packages/web` 内的 Nitro API routes，对外仍暴露稳定 HTTP API |
+| Application API | 接收请求、做参数校验、调用领域服务、返回结果 | `packages/api` 内的 Hono routes，对外暴露稳定 HTTP API |
 | Domain Services | 事件解析、草稿补问、事件管理、查询规则 | 业务核心，应保持平台无关 |
 | Persistence | 事件存储、查询、迁移、索引 | 通过 ORM 统一访问 |
 | Integrations | 浏览器语音能力、外部日历、通知服务 | 对外部依赖做适配与隔离 |
@@ -63,7 +63,7 @@
 
 ### 创建主流程
 1. 用户在前端输入自然语言文本
-2. `packages/web` 的 Vite React Web 将文本提交给同源 Nitro 草稿接口；后续 `Capacitor` App 调用同一套部署后的 HTTP API
+2. `packages/web` 的 Vite React Web 通过配置化 API base URL 提交给 `packages/api` 草稿接口；后续 `Capacitor` App 调用同一套部署后的 HTTP API
 3. 服务层返回结构化事件草稿、缺失字段和警告信息
 4. 用户确认或补充字段
 5. 前端提交创建事件请求
@@ -81,22 +81,19 @@
 
 ```text
 packages/
-  web/
+  api/
     src/
-      components/
-      lib/
-    api/
-      v1/
-        drafts.post.ts
-        drafts/[draftId].patch.ts
-        events.get.ts
-        events.post.ts
-    server/
+      routes/
       services/
       repositories/
       integrations/
       db/
       utils/
+      index.ts
+  web/
+    src/
+      components/
+      lib/
     vite.config.ts
   mobile/
     capacitor.config.ts
@@ -110,14 +107,17 @@ tests/
   integration/
   e2e/
 docs/
+package.json
 pnpm-workspace.yaml
+turbo.json
 ```
 
 ### 目录规则
-- `packages/web/` 放 Vite React SPA、Nitro API routes、服务端领域服务和前端交互逻辑
-- `packages/web/api/` 放 Nitro 文件路由，按文件名表达 HTTP 方法与路径
-- `packages/web/server/services/` 放业务逻辑，不允许依赖前端页面组件
-- `packages/web/server/repositories/` 负责数据库读写
+- `packages/api/` 放 Hono HTTP API、服务端领域服务和持久层逻辑
+- `packages/api/src/routes/` 放 Hono 路由，按资源组织 `/api/v1/*` 接口
+- `packages/api/src/services/` 放业务逻辑，不允许依赖前端页面组件
+- `packages/api/src/repositories/` 负责数据库读写
+- `packages/web/` 放 Vite React SPA、浏览器入口和前端交互逻辑，不放服务端业务逻辑
 - `packages/mobile/` 放 `Capacitor` 配置和原生工程壳体，不重复实现后端契约
 - `packages/schemas/` 放前后端共享的 Zod schema
 - `packages/shared/` 只放跨应用共享的稳定类型与工具，不放端专属业务逻辑
@@ -136,7 +136,7 @@ pnpm-workspace.yaml
 
 ## 6.2 组件与服务边界
 - UI 组件负责展示状态和触发动作，不负责事件解析与持久化规则
-- Nitro API route handler 只做鉴权、校验、编排和错误映射
+- Hono route handler 只做鉴权、校验、编排和错误映射
 - 领域服务负责核心规则，如时间解析、缺失字段判断、冲突检查
 - Repository 负责数据访问，不夹带业务分支逻辑
 
@@ -187,6 +187,5 @@ pnpm-workspace.yaml
 ## 9. 演进规则
 
 - 当某个版本需要新增能力时，优先复用现有事件模型和接口契约
-- 如果未来从 `packages/web` 内置 Nitro API 拆分为独立 API 服务，应保持 `api-spec.md` 中的契约不变或有迁移说明
 - 如果移动端接入，应复用同一套 API、共享 schema 和领域服务，而不是为移动端另起一套后端契约
 - 架构调整时，必须同步更新本文件和受影响的计划文档
