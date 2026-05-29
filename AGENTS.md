@@ -108,8 +108,8 @@ chore(deps): 升级 drizzle-orm 至 0.30.x
 
 作用域为可选项，用于指明改动的主要模块。推荐值：
 
-- `api` — Fastify 服务层、路由
-- `web` — Next.js 前端页面与组件
+- `api` — Nitro API routes、服务层
+- `web` — Vite React 前端页面与组件
 - `mobile` — Capacitor 移动端壳体
 - `schemas` — `packages/schemas` 共享 Zod schema
 - `shared` — `packages/shared` 共享类型与工具
