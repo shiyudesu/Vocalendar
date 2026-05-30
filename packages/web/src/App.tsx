@@ -1,309 +1,831 @@
-import type { FormEvent } from 'react'
-import { useMemo, useState } from 'react'
+import {
+  Bell,
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  Home,
+  MapPin,
+  Mic,
+  Moon,
+  Plus,
+  Search,
+  Settings,
+  Sun,
+  Tag,
+  Users,
+  Volume2,
+  X,
+} from 'lucide-react'
+import { useState } from 'react'
 
-import { ApiClientError, createDraft, getApiBaseUrl } from './lib/api'
-import type { EventDraft } from './lib/api'
+import type { CalendarViewType } from './components/CalendarViews'
+import {
+  CalendarContainer,
+  CalendarViewSwitcher,
+  DateNavigator,
+  navigateDate,
+} from './components/CalendarViews'
+import { CreateEventModal, EventModal } from './components/EventModal'
+import { VoiceModal } from './components/VoiceModal'
+import {
+  getEventsForDate,
+  mockEvents,
+  mockNotifications,
+  mockUser,
+} from './data/mock'
+import type { Event } from './data/mock'
 
-type RequestState = 'idle' | 'submitting' | 'success' | 'error'
+type Page = 'calendar' | 'voice' | 'settings'
 
-type DraftError = {
-  code: string
-  message: string
-  details: unknown
+function getTodayStart(): Date {
+  const now = new Date()
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate())
 }
 
-const fieldLabels: Record<string, string> = {
-  title: '标题',
-  startAt: '开始时间',
-  timezone: '时区',
+function formatDateShort(date: Date): string {
+  return `${date.getMonth() + 1}月${date.getDate()}日`
 }
 
-function App() {
-  const [sourceText, setSourceText] = useState('')
-  const [timezone, setTimezone] = useState(() => {
-    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
-  })
-  const [draft, setDraft] = useState<EventDraft | null>(null)
-  const [requestState, setRequestState] = useState<RequestState>('idle')
-  const [error, setError] = useState<DraftError | null>(null)
-  const apiBaseUrl = useMemo(() => getApiBaseUrl(), [])
-  const canSubmit = sourceText.trim().length > 0 && requestState !== 'submitting'
+function formatTime(date: Date): string {
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+}
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const nextSourceText = sourceText.trim()
+// ─── Notification Panel ───
 
-    if (!nextSourceText) {
-      return
-    }
-
-    setRequestState('submitting')
-    setError(null)
-
-    try {
-      const nextDraft = await createDraft({
-        sourceText: nextSourceText,
-        timezone,
-        referenceAt: new Date().toISOString(),
-      })
-
-      setDraft(nextDraft)
-      setRequestState('success')
-    } catch (caughtError) {
-      setDraft(null)
-      setRequestState('error')
-
-      if (caughtError instanceof ApiClientError) {
-        setError({
-          code: caughtError.code,
-          message: caughtError.message,
-          details: caughtError.details,
-        })
-        return
-      }
-
-      setError({
-        code: 'NETWORK_ERROR',
-        message: '无法连接 API 服务。',
-        details: null,
-      })
-    }
-  }
+function NotificationPanel({ onClose }: { onClose: () => void }) {
+  const [notifs] = useState(mockNotifications)
 
   return (
-    <main className="min-h-screen bg-[#f6f7f9] text-slate-950">
-      <div className="mx-auto flex min-h-screen w-full max-w-6xl flex-col px-4 py-5 sm:px-6 lg:px-8">
-        <header className="flex flex-col gap-3 border-b border-slate-200 pb-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-sm font-semibold text-teal-700">Vocalendar</p>
-            <h1 className="mt-1 text-2xl font-semibold sm:text-3xl">文本创建</h1>
-          </div>
-          <div className="flex flex-wrap gap-2 text-sm text-slate-600">
-            <span className="rounded border border-slate-200 bg-white px-3 py-1 break-all">
-              API {apiBaseUrl}
-            </span>
-            <span className="rounded border border-slate-200 bg-white px-3 py-1">{timezone}</span>
-          </div>
-        </header>
-
-        <section className="grid flex-1 gap-5 py-5 lg:grid-cols-[minmax(0,1.05fr)_minmax(320px,0.95fr)]">
-          <form
-            className="flex min-h-[360px] flex-col rounded border border-slate-200 bg-white p-4 shadow-sm sm:p-5"
-            onSubmit={handleSubmit}
-          >
-            <label className="text-sm font-medium text-slate-700" htmlFor="sourceText">
-              自然语言文本
-            </label>
-            <textarea
-              className="mt-3 min-h-44 flex-1 resize-none rounded border border-slate-300 bg-white px-3 py-3 text-base leading-7 transition outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
-              id="sourceText"
-              placeholder="明天下午三点和张总在国贸喝咖啡"
-              value={sourceText}
-              onChange={(event) => setSourceText(event.currentTarget.value)}
-            />
-
-            <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
-              <label className="text-sm font-medium text-slate-700" htmlFor="timezone">
-                时区
-                <input
-                  className="mt-2 w-full rounded border border-slate-300 bg-white px-3 py-2 text-sm transition outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
-                  id="timezone"
-                  value={timezone}
-                  onChange={(event) => setTimezone(event.currentTarget.value)}
-                />
-              </label>
-              <button
-                className="h-10 rounded bg-slate-950 px-5 text-sm font-semibold text-white transition hover:bg-teal-700 disabled:cursor-not-allowed disabled:bg-slate-300"
-                disabled={!canSubmit}
-                type="submit"
-              >
-                {requestState === 'submitting' ? '生成中' : '生成草稿'}
-              </button>
-            </div>
-          </form>
-
-          <DraftPanel draft={draft} error={error} requestState={requestState} timezone={timezone} />
-        </section>
+    <div className="absolute top-14 right-4 z-40 w-80 rounded-xl border border-slate-200 bg-white shadow-xl">
+      <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+        <h3 className="font-semibold text-slate-900">通知</h3>
+        <button
+          className="text-slate-400 transition hover:text-slate-600"
+          onClick={onClose}
+          type="button"
+        >
+          <X size={16} />
+        </button>
       </div>
-    </main>
-  )
-}
-
-type DraftPanelProps = {
-  draft: EventDraft | null
-  error: DraftError | null
-  requestState: RequestState
-  timezone: string
-}
-
-function DraftPanel({ draft, error, requestState, timezone }: DraftPanelProps) {
-  return (
-    <section className="rounded border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="text-lg font-semibold">草稿</h2>
-        <StatusBadge draft={draft} requestState={requestState} />
-      </div>
-
-      {error ? <ErrorState error={error} /> : null}
-      {!draft && !error ? <EmptyState requestState={requestState} /> : null}
-      {draft ? <DraftDetails draft={draft} timezone={draft.parsed.timezone || timezone} /> : null}
-    </section>
-  )
-}
-
-function StatusBadge({
-  draft,
-  requestState,
-}: {
-  draft: EventDraft | null
-  requestState: RequestState
-}) {
-  if (requestState === 'submitting') {
-    return (
-      <span className="rounded bg-amber-100 px-2 py-1 text-xs font-medium text-amber-800">
-        请求中
-      </span>
-    )
-  }
-
-  if (draft?.canSave) {
-    return (
-      <span className="rounded bg-teal-100 px-2 py-1 text-xs font-medium text-teal-800">
-        可保存
-      </span>
-    )
-  }
-
-  if (draft) {
-    return (
-      <span className="rounded bg-rose-100 px-2 py-1 text-xs font-medium text-rose-800">
-        待补充
-      </span>
-    )
-  }
-
-  if (requestState === 'error') {
-    return (
-      <span className="rounded bg-rose-100 px-2 py-1 text-xs font-medium text-rose-800">失败</span>
-    )
-  }
-
-  return (
-    <span className="rounded bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600">等待</span>
-  )
-}
-
-function EmptyState({ requestState }: { requestState: RequestState }) {
-  return (
-    <div className="mt-4 rounded border border-dashed border-slate-300 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
-      {requestState === 'submitting' ? '正在解析文本' : '暂无草稿'}
-    </div>
-  )
-}
-
-function ErrorState({ error }: { error: DraftError }) {
-  return (
-    <div className="mt-4 rounded border border-rose-200 bg-rose-50 p-3 text-sm text-rose-900">
-      <div className="font-semibold">{error.code}</div>
-      <div className="mt-1">{error.message}</div>
-      {error.details ? (
-        <pre className="mt-3 max-h-32 overflow-auto rounded bg-white p-2 text-xs text-rose-950">
-          {JSON.stringify(error.details, null, 2)}
-        </pre>
-      ) : null}
-    </div>
-  )
-}
-
-function DraftDetails({ draft, timezone }: { draft: EventDraft; timezone: string }) {
-  const parsedRows = [
-    ['标题', draft.parsed.title ?? '未识别'],
-    ['开始时间', draft.parsed.startAt ? formatDateTime(draft.parsed.startAt, timezone) : '未识别'],
-    ['结束时间', draft.parsed.endAt ? formatDateTime(draft.parsed.endAt, timezone) : '未设置'],
-    ['地点', draft.parsed.location ?? '未识别'],
-    [
-      '参与人',
-      draft.parsed.participants.length > 0 ? draft.parsed.participants.join('、') : '未识别',
-    ],
-  ]
-
-  return (
-    <div className="mt-4 space-y-4">
-      <div className="rounded border border-slate-200">
-        {parsedRows.map(([label, value]) => (
-          <div
-            className="grid grid-cols-[96px_minmax(0,1fr)] border-b border-slate-200 last:border-b-0"
-            key={label}
-          >
-            <div className="bg-slate-50 px-3 py-3 text-sm font-medium text-slate-600">{label}</div>
-            <div className="min-w-0 px-3 py-3 text-sm break-words text-slate-950">{value}</div>
+      <div className="max-h-80 overflow-y-auto">
+        {notifs.length === 0 ? (
+          <div className="px-4 py-8 text-center text-sm text-slate-400">
+            暂无通知
           </div>
-        ))}
-      </div>
-
-      <FieldGroup
-        emptyLabel="无缺失字段"
-        items={draft.missingFields.map((field) => fieldLabels[field] ?? field)}
-        title="缺失字段"
-        tone="rose"
-      />
-      <FieldGroup emptyLabel="无警告" items={draft.warnings} title="警告" tone="amber" />
-
-      {draft.clarificationPrompt ? (
-        <div className="rounded border border-teal-200 bg-teal-50 p-3 text-sm text-teal-900">
-          {draft.clarificationPrompt}
-        </div>
-      ) : null}
-    </div>
-  )
-}
-
-type FieldGroupProps = {
-  title: string
-  items: string[]
-  emptyLabel: string
-  tone: 'rose' | 'amber'
-}
-
-function FieldGroup({ title, items, emptyLabel, tone }: FieldGroupProps) {
-  const colorClass =
-    tone === 'rose'
-      ? 'border-rose-200 bg-rose-50 text-rose-800'
-      : 'border-amber-200 bg-amber-50 text-amber-800'
-
-  return (
-    <div>
-      <h3 className="text-sm font-semibold text-slate-700">{title}</h3>
-      <div className="mt-2 flex flex-wrap gap-2">
-        {items.length > 0 ? (
-          items.map((item) => (
-            <span
-              className={`rounded border px-2 py-1 text-xs font-medium ${colorClass}`}
-              key={item}
-            >
-              {item}
-            </span>
-          ))
         ) : (
-          <span className="rounded border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-500">
-            {emptyLabel}
-          </span>
+          notifs.map((n) => (
+            <div
+              className={`border-b border-slate-50 px-4 py-3 last:border-b-0 ${n.read ? '' : 'bg-teal-50/50'}`}
+              key={n.id}
+            >
+              <div className="flex items-start gap-2">
+                {!n.read && (
+                  <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-teal-500" />
+                )}
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-slate-800">
+                    {n.title}
+                  </p>
+                  <p className="mt-0.5 text-xs text-slate-500">{n.message}</p>
+                  <p className="mt-1 text-[11px] text-slate-400">
+                    {formatTime(n.time)}
+                  </p>
+                </div>
+              </div>
+            </div>
+          ))
         )}
       </div>
     </div>
   )
 }
 
-function formatDateTime(value: string, timezone: string) {
-  return new Intl.DateTimeFormat('zh-CN', {
-    timeZone: timezone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  }).format(new Date(value))
+// ─── Mini Calendar Sidebar ───
+
+function MiniCalendar({
+  currentDate,
+  onSelectDate,
+}: {
+  currentDate: Date
+  onSelectDate: (date: Date) => void
+}) {
+  const [displayMonth, setDisplayMonth] = useState(() => {
+    const d = new Date(currentDate)
+    d.setDate(1)
+    return d
+  })
+
+  const year = displayMonth.getFullYear()
+  const month = displayMonth.getMonth()
+
+  const firstDay = new Date(year, month, 1)
+  const startOffset = firstDay.getDay()
+  const daysInMonth = new Date(year, month + 1, 0).getDate()
+  const today = new Date()
+
+  const days: { date: Date; isCurrentMonth: boolean }[] = []
+
+  // Previous month padding
+  for (let i = startOffset - 1; i >= 0; i--) {
+    const d = new Date(year, month, -i)
+    days.push({ date: d, isCurrentMonth: false })
+  }
+  // Current month
+  for (let i = 1; i <= daysInMonth; i++) {
+    days.push({ date: new Date(year, month, i), isCurrentMonth: true })
+  }
+  // Next month padding
+  const remaining = 42 - days.length
+  for (let i = 1; i <= remaining; i++) {
+    days.push({ date: new Date(year, month + 1, i), isCurrentMonth: false })
+  }
+
+  const weekDays = ['日', '一', '二', '三', '四', '五', '六']
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+      <div className="mb-2 flex items-center justify-between">
+        <button
+          className="flex h-6 w-6 items-center justify-center rounded text-slate-500 transition hover:bg-slate-100"
+          onClick={() => setDisplayMonth(new Date(year, month - 1, 1))}
+          type="button"
+        >
+          <ChevronLeft size={14} />
+        </button>
+        <span className="text-sm font-semibold text-slate-800">
+          {year}年{month + 1}月
+        </span>
+        <button
+          className="flex h-6 w-6 items-center justify-center rounded text-slate-500 transition hover:bg-slate-100"
+          onClick={() => setDisplayMonth(new Date(year, month + 1, 1))}
+          type="button"
+        >
+          <ChevronRight size={14} />
+        </button>
+      </div>
+      <div className="grid grid-cols-7 gap-0.5">
+        {weekDays.map((d) => (
+          <div
+            className="py-1 text-center text-[10px] font-medium text-slate-400"
+            key={d}
+          >
+            {d}
+          </div>
+        ))}
+        {days.map(({ date, isCurrentMonth }, i) => {
+          const isToday =
+            date.getDate() === today.getDate() &&
+            date.getMonth() === today.getMonth() &&
+            date.getFullYear() === today.getFullYear()
+          const isSelected =
+            date.getDate() === currentDate.getDate() &&
+            date.getMonth() === currentDate.getMonth() &&
+            date.getFullYear() === currentDate.getFullYear()
+          const hasEvents = getEventsForDate(date).length > 0
+
+          return (
+            <button
+              className={`flex h-7 flex-col items-center justify-center rounded text-xs transition ${
+                isSelected
+                  ? 'bg-slate-900 text-white'
+                  : isToday
+                    ? 'bg-teal-100 text-teal-800'
+                    : isCurrentMonth
+                      ? 'text-slate-700 hover:bg-slate-100'
+                      : 'text-slate-300'
+              }`}
+              key={i}
+              onClick={() => onSelectDate(new Date(date))}
+              type="button"
+            >
+              <span>{date.getDate()}</span>
+              {hasEvents && !isSelected && (
+                <span
+                  className={`h-1 w-1 rounded-full ${isToday ? 'bg-teal-500' : 'bg-teal-400'}`}
+                />
+              )}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ─── Upcoming Events Sidebar ───
+
+function UpcomingEvents({ onEventClick }: { onEventClick: (e: Event) => void }) {
+  const upcoming = mockEvents
+    .filter((e) => e.startTime >= new Date())
+    .sort((a, b) => a.startTime.getTime() - b.startTime.getTime())
+    .slice(0, 5)
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+      <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
+        即将到来
+      </h4>
+      <div className="flex flex-col gap-2">
+        {upcoming.map((event) => (
+          <button
+            className="flex items-start gap-2 rounded-lg p-2 text-left transition hover:bg-slate-50"
+            key={event.id}
+            onClick={() => onEventClick(event)}
+            type="button"
+          >
+            <div className="flex h-8 w-8 shrink-0 flex-col items-center justify-center rounded-lg bg-teal-50 text-[10px] font-semibold text-teal-700">
+              <span>{event.startTime.getDate()}</span>
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-xs font-medium text-slate-800">
+                {event.title}
+              </p>
+              <p className="text-[10px] text-slate-500">
+                {formatTime(event.startTime)}
+                {event.location ? ` · ${event.location}` : ''}
+              </p>
+            </div>
+          </button>
+        ))}
+        {upcoming.length === 0 && (
+          <p className="py-2 text-center text-xs text-slate-400">暂无事件</p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── Settings Page ───
+
+function SettingsPage() {
+  const [settings, setSettings] = useState(mockUser.settings)
+  const [activeTab, setActiveTab] = useState<'general' | 'voice' | 'account'>('general')
+
+  return (
+    <div className="mx-auto max-w-3xl">
+      <div className="mb-6">
+        <h2 className="text-2xl font-bold text-slate-900">设置</h2>
+        <p className="mt-1 text-sm text-slate-500">管理您的账户和应用偏好</p>
+      </div>
+
+      <div className="flex gap-6">
+        {/* Tabs */}
+        <div className="w-48 shrink-0 space-y-1">
+          {[
+            { id: 'general' as const, label: '通用', icon: Settings },
+            { id: 'voice' as const, label: '语音', icon: Volume2 },
+            { id: 'account' as const, label: '账户', icon: Users },
+          ].map((tab) => (
+            <button
+              className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition ${
+                activeTab === tab.id
+                  ? 'bg-slate-900 text-white'
+                  : 'text-slate-600 hover:bg-slate-100'
+              }`}
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              type="button"
+            >
+              <tab.icon size={16} />
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+          {activeTab === 'general' && (
+            <div className="space-y-6">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900">通用设置</h3>
+                <p className="text-sm text-slate-500">自定义日历的外观和行为</p>
+              </div>
+
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-slate-700">主题</p>
+                    <p className="text-xs text-slate-500">选择应用主题</p>
+                  </div>
+                  <div className="flex gap-2">
+                    {[
+                      { value: 'light' as const, icon: Sun, label: '浅色' },
+                      { value: 'dark' as const, icon: Moon, label: '深色' },
+                      { value: 'system' as const, icon: Settings, label: '跟随系统' },
+                    ].map((opt) => (
+                      <button
+                        className={`flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition ${
+                          settings.theme === opt.value
+                            ? 'border-slate-900 bg-slate-900 text-white'
+                            : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                        }`}
+                        key={opt.value}
+                        onClick={() =>
+                          setSettings((s) => ({ ...s, theme: opt.value }))
+                        }
+                        type="button"
+                      >
+                        <opt.icon size={14} />
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-slate-700">默认视图</p>
+                    <p className="text-xs text-slate-500">打开日历时默认显示的视图</p>
+                  </div>
+                  <select
+                    className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-teal-600"
+                    onChange={(e) =>
+                      setSettings((s) => ({
+                        ...s,
+                        defaultView: e.target.value as typeof settings.defaultView,
+                      }))
+                    }
+                    value={settings.defaultView}
+                  >
+                    <option value="day">日视图</option>
+                    <option value="week">周视图</option>
+                    <option value="month">月视图</option>
+                    <option value="list">列表视图</option>
+                  </select>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-slate-700">默认提醒时间</p>
+                    <p className="text-xs text-slate-500">新事件的默认提醒提前量</p>
+                  </div>
+                  <select
+                    className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-teal-600"
+                    onChange={(e) =>
+                      setSettings((s) => ({
+                        ...s,
+                        defaultReminderMinutes: Number(e.target.value),
+                      }))
+                    }
+                    value={settings.defaultReminderMinutes}
+                  >
+                    <option value={0}>准时</option>
+                    <option value={5}>提前 5 分钟</option>
+                    <option value={10}>提前 10 分钟</option>
+                    <option value={15}>提前 15 分钟</option>
+                    <option value={30}>提前 30 分钟</option>
+                    <option value={60}>提前 1 小时</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'voice' && (
+            <div className="space-y-6">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900">语音设置</h3>
+                <p className="text-sm text-slate-500">配置语音识别和反馈选项</p>
+              </div>
+
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-slate-700">语音反馈</p>
+                    <p className="text-xs text-slate-500">操作完成后语音播报结果</p>
+                  </div>
+                  <button
+                    className={`relative h-6 w-11 rounded-full transition ${
+                      settings.voiceFeedback ? 'bg-teal-500' : 'bg-slate-300'
+                    }`}
+                    onClick={() =>
+                      setSettings((s) => ({
+                        ...s,
+                        voiceFeedback: !s.voiceFeedback,
+                      }))
+                    }
+                    type="button"
+                  >
+                    <span
+                      className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
+                        settings.voiceFeedback ? 'translate-x-5.5' : 'translate-x-0.5'
+                      }`}
+                      style={{
+                        transform: settings.voiceFeedback
+                          ? 'translateX(22px)'
+                          : 'translateX(2px)',
+                      }}
+                    />
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-slate-700">语音语速</p>
+                    <p className="text-xs text-slate-500">调整语音播报速度</p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs text-slate-400">慢</span>
+                    <input
+                      className="w-32 accent-teal-600"
+                      max={2}
+                      min={0.5}
+                      onChange={(e) =>
+                        setSettings((s) => ({
+                          ...s,
+                          voiceSpeed: Number(e.target.value),
+                        }))
+                      }
+                      step={0.1}
+                      type="range"
+                      value={settings.voiceSpeed}
+                    />
+                    <span className="text-xs text-slate-400">快</span>
+                    <span className="w-8 text-right text-xs font-medium text-slate-700">
+                      {settings.voiceSpeed}x
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-slate-700">语音识别语言</p>
+                    <p className="text-xs text-slate-500">选择语音输入的识别语言</p>
+                  </div>
+                  <select
+                    className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-teal-600"
+                    value={settings.language}
+                  >
+                    <option value="zh-CN">中文（普通话）</option>
+                    <option value="en-US">English (US)</option>
+                    <option value="zh-TW">中文（台湾）</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'account' && (
+            <div className="space-y-6">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900">账户信息</h3>
+                <p className="text-sm text-slate-500">管理您的个人资料和账户</p>
+              </div>
+
+              <div className="flex items-center gap-4">
+                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-teal-100 text-xl font-bold text-teal-700">
+                  {mockUser.name[0]}
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">
+                    {mockUser.name}
+                  </p>
+                  <p className="text-sm text-slate-500">{mockUser.email}</p>
+                  <p className="mt-1 text-xs text-slate-400">
+                    时区：{mockUser.timezone}
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">
+                    显示名称
+                  </label>
+                  <input
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
+                    defaultValue={mockUser.name}
+                    type="text"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">
+                    邮箱
+                  </label>
+                  <input
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
+                    defaultValue={mockUser.email}
+                    type="email"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 p-4">
+                <div>
+                  <p className="text-sm font-medium text-slate-700">数据导出</p>
+                  <p className="text-xs text-slate-500">导出日历事件为 ICS / CSV 格式</p>
+                </div>
+                <button
+                  className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                  type="button"
+                >
+                  导出数据
+                </button>
+              </div>
+
+              <div className="flex items-center justify-between rounded-lg border border-rose-100 bg-rose-50 p-4">
+                <div>
+                  <p className="text-sm font-medium text-rose-700">删除账户</p>
+                  <p className="text-xs text-rose-500">此操作不可撤销</p>
+                </div>
+                <button
+                  className="rounded-lg border border-rose-200 bg-white px-4 py-2 text-sm font-medium text-rose-600 transition hover:bg-rose-50"
+                  type="button"
+                >
+                  删除账户
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Voice Assistant Page ───
+
+function VoicePage() {
+  const [showVoiceModal, setShowVoiceModal] = useState(false)
+
+  return (
+    <div className="mx-auto max-w-2xl">
+      <div className="mb-8 text-center">
+        <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-teal-50">
+          <Mic size={36} className="text-teal-600" />
+        </div>
+        <h2 className="text-2xl font-bold text-slate-900">语音助手</h2>
+        <p className="mt-2 text-slate-500">
+          用自然语言快速创建、查询和修改日程
+        </p>
+      </div>
+
+      <button
+        className="mx-auto mb-8 flex h-24 w-24 items-center justify-center rounded-full bg-slate-900 text-white shadow-xl shadow-slate-300 transition hover:scale-105 hover:bg-teal-700"
+        onClick={() => setShowVoiceModal(true)}
+        type="button"
+      >
+        <Mic size={40} />
+      </button>
+
+      <div className="mb-8 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <h3 className="mb-4 text-sm font-semibold text-slate-800">您可以这样说</h3>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {[
+            '明天下午三点和张总在国贸喝咖啡',
+            '每周一三五晚上 8 点提醒我去健身',
+            '把我刚才加的会议删掉',
+            '下周我要出差吗？',
+            '会议延期 15 分钟',
+            '今天有什么安排？',
+          ].map((example) => (
+            <div
+              className="rounded-lg border border-slate-100 bg-slate-50 p-3 text-sm text-slate-600"
+              key={example}
+            >
+              「{example}」
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <h3 className="mb-4 text-sm font-semibold text-slate-800">快捷指令</h3>
+        <div className="flex flex-wrap gap-2">
+          {[
+            '我到家了',
+            '会议延期 15 分钟',
+            '会议取消',
+            '今天有什么安排',
+            '下周日程',
+          ].map((cmd) => (
+            <span
+              className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-600"
+              key={cmd}
+            >
+              {cmd}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {showVoiceModal && (
+        <VoiceModal onClose={() => setShowVoiceModal(false)} />
+      )}
+    </div>
+  )
+}
+
+// ─── Main App ───
+
+function App() {
+  const [page, setPage] = useState<Page>('calendar')
+  const [calendarView, setCalendarView] = useState<CalendarViewType>('week')
+  const [currentDate, setCurrentDate] = useState(() => getTodayStart())
+  const [selectedEvent, setSelectedEvent] = useState<Event | null>(null)
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [showVoiceModal, setShowVoiceModal] = useState(false)
+  const [showNotifPanel, setShowNotifPanel] = useState(false)
+
+  function handleNavigate(direction: 'prev' | 'next') {
+    setCurrentDate((d) => navigateDate(d, calendarView, direction))
+  }
+
+  function handleToday() {
+    setCurrentDate(getTodayStart())
+  }
+
+  function handleEventClick(event: Event) {
+    setSelectedEvent(event)
+  }
+
+  return (
+    <div className="flex h-screen bg-[#f6f7f9]">
+      {/* Sidebar */}
+      <aside className="flex w-60 shrink-0 flex-col border-r border-slate-200 bg-white">
+        {/* Logo */}
+        <div className="flex items-center gap-2 px-4 py-4">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-900 text-white">
+            <CalendarDays size={18} />
+          </div>
+          <span className="text-lg font-bold text-slate-900">Vocalendar</span>
+        </div>
+
+        {/* Create button */}
+        <div className="px-3 pb-3">
+          <button
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-teal-700"
+            onClick={() => setShowCreateModal(true)}
+            type="button"
+          >
+            <Plus size={18} />
+            创建事件
+          </button>
+        </div>
+
+        {/* Nav */}
+        <nav className="flex-1 space-y-0.5 px-3">
+          {[
+            { id: 'calendar' as Page, label: '日历', icon: CalendarDays },
+            { id: 'voice' as Page, label: '语音助手', icon: Mic },
+            { id: 'settings' as Page, label: '设置', icon: Settings },
+          ].map((item) => (
+            <button
+              className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm font-medium transition ${
+                page === item.id
+                  ? 'bg-slate-900 text-white'
+                  : 'text-slate-600 hover:bg-slate-100'
+              }`}
+              key={item.id}
+              onClick={() => setPage(item.id)}
+              type="button"
+            >
+              <item.icon size={18} />
+              {item.label}
+            </button>
+          ))}
+        </nav>
+
+        {/* Mini Calendar - only show on calendar page */}
+        {page === 'calendar' && (
+          <div className="px-3 pb-3 space-y-3">
+            <MiniCalendar
+              currentDate={currentDate}
+              onSelectDate={(d) => {
+                setCurrentDate(d)
+                setCalendarView('day')
+              }}
+            />
+            <UpcomingEvents onEventClick={handleEventClick} />
+          </div>
+        )}
+
+        {/* User */}
+        <div className="border-t border-slate-100 p-3">
+          <div className="flex items-center gap-2 rounded-lg px-2 py-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-teal-100 text-xs font-bold text-teal-700">
+              {mockUser.name[0]}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-xs font-semibold text-slate-800">
+                {mockUser.name}
+              </p>
+              <p className="truncate text-[10px] text-slate-500">
+                {mockUser.email}
+              </p>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      {/* Main Content */}
+      <main className="flex flex-1 flex-col min-w-0">
+        {/* Top bar */}
+        {page === 'calendar' && (
+          <header className="flex items-center justify-between border-b border-slate-200 bg-white px-6 py-3">
+            <DateNavigator
+              date={currentDate}
+              onNavigate={handleNavigate}
+              onToday={handleToday}
+              view={calendarView}
+            />
+            <div className="flex items-center gap-2">
+              <CalendarViewSwitcher
+                onChange={setCalendarView}
+                view={calendarView}
+              />
+              <button
+                className="ml-2 flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50"
+                onClick={() => setShowNotifPanel((v) => !v)}
+                type="button"
+              >
+                <Bell size={18} />
+                {mockNotifications.some((n) => !n.read) && (
+                  <span className="absolute top-2.5 right-6.5 h-2 w-2 rounded-full bg-rose-500" />
+                )}
+              </button>
+              <button
+                className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50"
+                onClick={() => setShowVoiceModal(true)}
+                type="button"
+              >
+                <Mic size={18} />
+              </button>
+            </div>
+          </header>
+        )}
+
+        {page !== 'calendar' && (
+          <header className="flex items-center justify-between border-b border-slate-200 bg-white px-6 py-3">
+            <h1 className="text-xl font-bold text-slate-900">
+              {page === 'voice' && '语音助手'}
+              {page === 'settings' && '设置'}
+            </h1>
+            <div className="flex items-center gap-2">
+              <button
+                className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50"
+                onClick={() => setShowVoiceModal(true)}
+                type="button"
+              >
+                <Mic size={18} />
+              </button>
+            </div>
+          </header>
+        )}
+
+        {/* Content area */}
+        <div className="flex-1 overflow-hidden">
+          {page === 'calendar' && (
+            <div className="h-full p-4">
+              <div className="h-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+                <CalendarContainer
+                  currentDate={currentDate}
+                  onEventClick={handleEventClick}
+                  view={calendarView}
+                />
+              </div>
+            </div>
+          )}
+
+          {page === 'voice' && (
+            <div className="h-full overflow-y-auto p-6">
+              <VoicePage />
+            </div>
+          )}
+
+          {page === 'settings' && (
+            <div className="h-full overflow-y-auto p-6">
+              <SettingsPage />
+            </div>
+          )}
+        </div>
+      </main>
+
+      {/* Modals */}
+      {selectedEvent && (
+        <EventModal
+          event={selectedEvent}
+          onClose={() => setSelectedEvent(null)}
+        />
+      )}
+
+      {showCreateModal && (
+        <CreateEventModal
+          initialDate={currentDate}
+          onClose={() => setShowCreateModal(false)}
+        />
+      )}
+
+      {showVoiceModal && (
+        <VoiceModal onClose={() => setShowVoiceModal(false)} />
+      )}
+
+      {showNotifPanel && (
+        <NotificationPanel onClose={() => setShowNotifPanel(false)} />
+      )}
+    </div>
+  )
 }
 
 export default App
