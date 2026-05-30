@@ -156,6 +156,35 @@ describe('v0.1 API contract', () => {
     expect(payload.meta.timestamp).toMatch(isoTimestampPattern)
   })
 
+  test('rejects draft creation when timezone is invalid', async () => {
+    eventMemoryRepository.reset()
+    const app = createApp()
+
+    const response = await app.request('/api/v1/drafts', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        sourceText: '明天下午三点喝咖啡',
+        timezone: 'Invalid/Timezone',
+        referenceAt: '2026-05-29T02:00:00Z',
+        source: 'text',
+      }),
+    })
+    const payload = (await response.json()) as ErrorResponsePayload
+
+    expect(response.status).toBe(400)
+    expect(payload.error.code).toBe('VALIDATION_ERROR')
+    expect(payload.error.details).toEqual(
+      expect.objectContaining({
+        fieldErrors: expect.objectContaining({
+          timezone: expect.anything(),
+        }),
+      }),
+    )
+    expect(payload.meta.requestId).toBe('dev-request')
+    expect(payload.meta.timestamp).toMatch(isoTimestampPattern)
+  })
+
   test('returns draft parse failed when no event signal can be extracted', async () => {
     eventMemoryRepository.reset()
     const app = createApp()

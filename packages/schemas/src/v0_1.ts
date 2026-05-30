@@ -2,11 +2,24 @@ import { z } from 'zod'
 
 export const eventSourceSchema = z.enum(['text', 'voice'])
 
+function isValidIanaTimezone(timezone: string) {
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: timezone }).format(new Date())
+    return true
+  } catch {
+    return false
+  }
+}
+
+const timezoneSchema = z.string().min(1).refine(isValidIanaTimezone, {
+  message: 'Invalid IANA timezone.',
+})
+
 export const eventDraftParsedSchema = z.object({
   title: z.string().min(1).nullable(),
   startAt: z.string().datetime().nullable(),
   endAt: z.string().datetime().nullable(),
-  timezone: z.string().min(1),
+  timezone: timezoneSchema,
   location: z.string().min(1).nullable(),
   participants: z.array(z.string().min(1)),
 })
@@ -30,7 +43,7 @@ export const eventSchema = z.object({
   description: z.string().nullable(),
   startAt: z.string().datetime(),
   endAt: z.string().datetime().nullable(),
-  timezone: z.string().min(1),
+  timezone: timezoneSchema,
   location: z.string().min(1).nullable(),
   participants: z.array(z.string().min(1)),
   source: eventSourceSchema,
@@ -41,7 +54,7 @@ export const eventSchema = z.object({
 
 export const createDraftRequestSchema = z.object({
   sourceText: z.string().min(1),
-  timezone: z.string().min(1),
+  timezone: timezoneSchema,
   referenceAt: z.string().datetime(),
   source: eventSourceSchema.default('text'),
 })
@@ -55,7 +68,7 @@ export const updateDraftFieldsSchema = z
     title: z.string().min(1).nullable().optional(),
     startAt: z.string().datetime().nullable().optional(),
     endAt: z.string().datetime().nullable().optional(),
-    timezone: z.string().min(1).optional(),
+    timezone: timezoneSchema.optional(),
     location: z.string().min(1).nullable().optional(),
     participants: z.array(z.string().min(1)).optional(),
   })

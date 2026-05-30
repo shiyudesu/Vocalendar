@@ -1,18 +1,18 @@
 import * as chrono from 'chrono-node'
 
 const chineseDigitMap: Record<string, string> = {
-  '〇': '0',
-  '零': '0',
-  '一': '1',
-  '二': '2',
-  '两': '2',
-  '三': '3',
-  '四': '4',
-  '五': '5',
-  '六': '6',
-  '七': '7',
-  '八': '8',
-  '九': '9',
+  〇: '0',
+  零: '0',
+  一: '1',
+  二: '2',
+  两: '2',
+  三: '3',
+  四: '4',
+  五: '5',
+  六: '6',
+  七: '7',
+  八: '8',
+  九: '9',
 }
 
 const standaloneSignalPattern =
@@ -48,7 +48,8 @@ type ExtractionResult = {
 }
 
 const punctuationBoundaryPattern = /[ ,，。；;：:]/u
-const timeBoundaryPattern = /^(?:今天|明天|后天|今晚|今早|今晨|上午|中午|下午|晚上|凌晨|本周|下周|周[一二三四五六日天]?|星期[一二三四五六日天]?|礼拜[一二三四五六日天]?|\d+[点:\-]|\d+月|\d+号|[零〇一二两三四五六七八九十]+点)/u
+const timeBoundaryPattern =
+  /^(?:今天|明天|后天|今晚|今早|今晨|上午|中午|下午|晚上|凌晨|本周|下周|周[一二三四五六日天]?|星期[一二三四五六日天]?|礼拜[一二三四五六日天]?|\d+[点:\-]|\d+月|\d+号|[零〇一二两三四五六七八九十]+点)/u
 const triggerBoundaryPattern = /^(?:在|到|去|于|和|跟|约|见|找|与|同)/u
 const locationStopPhrases = [
   '喝咖啡',
@@ -70,13 +71,7 @@ const locationStopPhrases = [
   '过方案',
   '一起',
 ]
-const participantStopPhrases = [
-  ...locationStopPhrases,
-  '和',
-  '跟',
-  '与',
-  '同',
-]
+const participantStopPhrases = [...locationStopPhrases, '和', '跟', '与', '同']
 const titleCleanupPatterns = [
   /(?:^|\s)(?:和|跟|约|见|找|在|到|去|于|与|同|一起)(?=\s|$)/gu,
   /\s+/gu,
@@ -130,7 +125,9 @@ export function parseDraftFields(input: ParseDraftFieldsInput): ParsedDraftField
   const missingFields = computeMissingFields(title, timeResult.startAt)
   const clarificationPrompt = buildClarificationPrompt(missingFields)
 
-  if (!hasUsableSignal(normalizedText, title, timeResult.startAt, locationResult.value, participants)) {
+  if (
+    !hasUsableSignal(normalizedText, title, timeResult.startAt, locationResult.value, participants)
+  ) {
     throw new DraftParseError()
   }
 
@@ -156,7 +153,10 @@ function normalizeText(sourceText: string): string {
     .replace(/\s+/gu, ' ')
     .replace(/[：]/gu, ':')
     .replace(/[，、]/gu, ' ')
-    .replace(/([零〇一二两三四五六七八九])点/gu, (_, digit: string) => `${chineseDigitMap[digit] ?? digit}点`)
+    .replace(
+      /([零〇一二两三四五六七八九])点/gu,
+      (_, digit: string) => `${chineseDigitMap[digit] ?? digit}点`,
+    )
 }
 
 function extractTime(text: string, referenceAt: string, timezone: string): TimeExtraction {
@@ -318,7 +318,9 @@ function hasUsableSignal(
 }
 
 function overlaps(span: Span, consumedSpans: Span[]) {
-  return consumedSpans.some((consumedSpan) => span.start < consumedSpan.end && span.end > consumedSpan.start)
+  return consumedSpans.some(
+    (consumedSpan) => span.start < consumedSpan.end && span.end > consumedSpan.start,
+  )
 }
 
 function cleanupEntity(value: string) {

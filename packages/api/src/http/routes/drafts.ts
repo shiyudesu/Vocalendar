@@ -1,8 +1,9 @@
 import { createDraftRequestSchema } from '@vocalendar/schemas'
 import { Hono } from 'hono'
 
+import { DraftParseError } from '../../services/drafts/draft-parser.js'
 import { createDraft } from '../../services/drafts/draft.service.js'
-import { ok, validationError } from '../utils/responses.js'
+import { draftParseFailed, ok, validationError } from '../utils/responses.js'
 
 export const draftRoutes = new Hono()
 
@@ -14,9 +15,17 @@ draftRoutes.post('/', async (c) => {
     return validationError(c, result.error.flatten())
   }
 
-  const draft = createDraft(result.data)
+  try {
+    const draft = createDraft(result.data)
 
-  return ok(c, { draft })
+    return ok(c, { draft })
+  } catch (error) {
+    if (error instanceof DraftParseError) {
+      return draftParseFailed(c, { sourceText: result.data.sourceText })
+    }
+
+    throw error
+  }
 })
 
 draftRoutes.patch('/:draftId', async (c) => {
