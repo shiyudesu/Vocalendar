@@ -39,7 +39,7 @@ type ParseDraftFieldsInput = {
 type TimeExtraction = {
   startAt: string | null
   endAt: string | null
-  consumedSpan: Span | null
+  consumedSpans: Span[]
 }
 
 type ExtractionResult = {
@@ -76,7 +76,22 @@ const titleCleanupPatterns = [
   /(?:^|\s)(?:和|跟|约|见|找|在|到|去|于|与|同|一起)(?=\s|$)/gu,
   /\s+/gu,
 ]
-const titleAffixTokens = ['和', '跟', '约', '见', '找', '在', '到', '去', '于', '与', '同', '一起']
+const titleAffixTokens = [
+  '和',
+  '跟',
+  '约',
+  '见',
+  '找',
+  '在',
+  '到',
+  '去',
+  '于',
+  '与',
+  '同',
+  '一起',
+  '开始',
+]
+const titleNoisePattern = /^(?:开始|结束|开始时间|结束时间|时间)$/u
 
 export class DraftParseError extends Error {
   code = 'DRAFT_PARSE_FAILED' as const
@@ -108,9 +123,7 @@ export function parseDraftFields(input: ParseDraftFieldsInput): ParsedDraftField
   const consumedSpans: Span[] = []
 
   const timeResult = extractTime(normalizedText, input.referenceAt, input.timezone)
-  if (timeResult.consumedSpan) {
-    consumedSpans.push(timeResult.consumedSpan)
-  }
+  consumedSpans.push(...timeResult.consumedSpans)
 
   const locationResult = extractLocation(normalizedText, consumedSpans)
   if (locationResult.consumedSpan) {
@@ -161,29 +174,88 @@ function normalizeText(sourceText: string): string {
 
 function extractTime(text: string, referenceAt: string, timezone: string): TimeExtraction {
   const instant = new Date(referenceAt)
-  const [result] = chrono.zh.parse(
+  const results = chrono.zh.parse(
     text,
     { instant, timezone: getTimezoneOffsetMinutes(instant, timezone) },
     { forwardDate: true },
   )
 
-  if (!result) {
+  if (results.length === 0) {
     return {
       startAt: null,
       endAt: null,
-      consumedSpan: null as Span | null,
+      consumedSpans: [],
     }
   }
 
-  const hasExplicitHour = result.start.isCertain('hour')
-
-  return {
-    startAt: hasExplicitHour ? result.start.date().toISOString() : null,
-    endAt: result.end?.isCertain('hour') ? result.end.date().toISOString() : null,
-    consumedSpan: {
+  const hourResult = results.find((result) => result.start.isCertain('hour'))
+  const dateResult = results.find((result) => hasExplicitDate(result) && result !== hourResult)
+  const primaryResult = hourResult ?? results[0]
+  const startAt =
+    hourResult && dateResult
+      ? combineDateAndTime(dateResult.start.date(), hourResult.start.date(), timezone)
+      : primaryResult.start.isCertain('hour')
+        ? primaryResult.start.date().toISOString()
+        : null
+  const consumedSpans = [dateResult, hourResult ?? (!dateResult ? primaryResult : null)]
+    .filter((result): result is chrono.ParsedResult => result !== null && result !== undefined)
+    .map((result) => ({
       start: result.index,
       end: result.index + result.text.length,
-    },
+    }))
+
+  return {
+    startAt,
+    endAt: primaryResult.end?.isCertain('hour') ? primaryResult.end.date().toISOString() : null,
+    consumedSpans,
+  }
+}
+
+function hasExplicitDate(result: chrono.ParsedResult) {
+  return (
+    result.start.isCertain('year') &&
+    result.start.isCertain('month') &&
+    result.start.isCertain('day')
+  )
+}
+
+function combineDateAndTime(dateSource: Date, timeSource: Date, timezone: string) {
+  const dateParts = getZonedDateTimeParts(dateSource, timezone)
+  const timeParts = getZonedDateTimeParts(timeSource, timezone)
+  const utcGuess = Date.UTC(
+    dateParts.year,
+    dateParts.month - 1,
+    dateParts.day,
+    timeParts.hour,
+    timeParts.minute,
+    timeParts.second,
+  )
+  const offsetMinutes = getTimezoneOffsetMinutes(new Date(utcGuess), timezone)
+
+  return new Date(utcGuess - offsetMinutes * 60000).toISOString()
+}
+
+function getZonedDateTimeParts(date: Date, timezone: string) {
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  })
+  const parts = formatter.formatToParts(date)
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]))
+
+  return {
+    year: Number(values.year),
+    month: Number(values.month),
+    day: Number(values.day),
+    hour: Number(values.hour),
+    minute: Number(values.minute),
+    second: Number(values.second),
   }
 }
 
@@ -261,6 +333,10 @@ function deriveTitle(text: string, consumedSpans: Span[]): string | null {
     cleaned = cleaned.replace(pattern, ' ')
   }
   cleaned = stripOptionalTitleAffixes(cleaned.trim())
+
+  if (titleNoisePattern.test(cleaned)) {
+    return null
+  }
 
   return cleaned.length > 0 ? cleaned : null
 }

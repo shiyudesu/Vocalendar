@@ -1,9 +1,9 @@
-import { createDraftRequestSchema } from '@vocalendar/schemas'
+import { createDraftRequestSchema, updateDraftRequestSchema } from '@vocalendar/schemas'
 import { Hono } from 'hono'
 
 import { DraftParseError } from '../../services/drafts/draft-parser.js'
-import { createDraft } from '../../services/drafts/draft.service.js'
-import { draftParseFailed, ok, validationError } from '../utils/responses.js'
+import { createDraft, updateDraft } from '../../services/drafts/draft.service.js'
+import { draftParseFailed, notFound, ok, validationError } from '../utils/responses.js'
 
 export const draftRoutes = new Hono()
 
@@ -31,10 +31,25 @@ draftRoutes.post('/', async (c) => {
 draftRoutes.patch('/:draftId', async (c) => {
   const draftId = c.req.param('draftId')
   const body = await c.req.json().catch(() => null)
+  const result = updateDraftRequestSchema.safeParse(body)
 
-  return ok(c, {
-    draftId,
-    received: body,
-    message: 'PATCH /api/v1/drafts/:draftId is reserved for v0.1 draft refinement.',
-  })
+  if (!result.success) {
+    return validationError(c, result.error.flatten())
+  }
+
+  try {
+    const draft = updateDraft(draftId, result.data)
+
+    if (!draft) {
+      return notFound(c, 'Draft was not found.', { draftId })
+    }
+
+    return ok(c, { draft })
+  } catch (error) {
+    if (error instanceof DraftParseError) {
+      return draftParseFailed(c, { draftId, userInput: result.data.userInput })
+    }
+
+    throw error
+  }
 })
