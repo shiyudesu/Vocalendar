@@ -3,6 +3,9 @@ import { useEffect, useState } from 'react'
 
 import { getPriorityColor, mockUser } from '../data/mock'
 import type { Attendee, Event, RecurrenceRule, Reminder } from '../data/mock'
+import { getAllTagNames } from '../lib/tags'
+import { TagChip } from './TagChip'
+import { TagInput } from './TagInput'
 
 function formatDateTimeInput(date: Date): string {
   const d = new Date(date)
@@ -58,12 +61,14 @@ export function EventModal({
   onUpdate,
   onDelete,
   onTagClick,
+  tagSuggestions = [],
 }: {
   event: Event
   onClose: () => void
   onUpdate?: (patch: Partial<Event>) => void
   onDelete?: () => void
   onTagClick?: (tag: string) => void
+  tagSuggestions?: string[]
 }) {
   const [isEditing, setIsEditing] = useState(false)
   const [editForm, setEditForm] = useState({
@@ -221,6 +226,21 @@ export function EventModal({
                 placeholder="添加描述..."
                 rows={3}
                 value={editForm.description}
+              />
+            </div>
+
+            <div>
+              <label
+                className="mb-1.5 block text-sm font-medium text-slate-700"
+                htmlFor="editEventTags"
+              >
+                标签
+              </label>
+              <TagInput
+                id="editEventTags"
+                onChange={(tags) => setEditForm((f) => ({ ...f, tags }))}
+                suggestions={tagSuggestions}
+                value={editForm.tags}
               />
             </div>
 
@@ -414,14 +434,23 @@ export function EventModal({
             <div className="flex items-start gap-3 py-2">
               <Tag size={18} className="mt-0.5 shrink-0 text-slate-400" />
               <div className="flex flex-wrap gap-1.5">
-                {event.tags.map((tag) => (
-                  <span
-                    className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-600"
-                    key={tag}
-                  >
-                    {tag}
-                  </span>
-                ))}
+                {event.tags.map((tag) =>
+                  onTagClick ? (
+                    <TagChip
+                      ariaLabel={`聚焦标签「${tag}」`}
+                      clickable
+                      key={tag}
+                      onClick={(t) => {
+                        onTagClick(t)
+                        onClose()
+                      }}
+                      size="md"
+                      tag={tag}
+                    />
+                  ) : (
+                    <TagChip key={tag} size="md" tag={tag} />
+                  ),
+                )}
               </div>
             </div>
           ) : null}
@@ -445,6 +474,7 @@ export function CreateEventModal({
   initialDate,
   onClose,
   onCreate,
+  tagSuggestions = [],
 }: {
   initialDate?: Date
   onClose: () => void
@@ -458,6 +488,7 @@ export function CreateEventModal({
     allDay?: boolean
     tags?: string[]
   }) => void
+  tagSuggestions?: string[]
 }) {
   const defaultDate = initialDate || new Date()
   const [form, setForm] = useState({
@@ -622,6 +653,21 @@ export function CreateEventModal({
               placeholder="添加描述..."
               rows={3}
               value={form.description}
+            />
+          </div>
+
+          <div>
+            <label
+              className="mb-1.5 block text-sm font-medium text-slate-700"
+              htmlFor="newEventTags"
+            >
+              标签
+            </label>
+            <TagInput
+              id="newEventTags"
+              onChange={(tags) => setForm((f) => ({ ...f, tags }))}
+              suggestions={tagSuggestions}
+              value={form.tags}
             />
           </div>
 

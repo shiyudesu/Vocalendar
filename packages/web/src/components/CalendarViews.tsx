@@ -8,6 +8,8 @@ import {
   getPriorityColor,
 } from '../data/mock'
 import type { Event } from '../data/mock'
+import { getTagPalette, UNTAGGED_PALETTE } from '../lib/tagPalette'
+import { TagChip } from './TagChip'
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i)
 const WEEK_DAYS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
@@ -122,12 +124,7 @@ function EventCard({
           {event.tags && event.tags.length > 0 ? (
             <div className="mt-2 flex flex-wrap gap-1">
               {event.tags.map((tag) => (
-                <span
-                  className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600"
-                  key={tag}
-                >
-                  {tag}
-                </span>
+                <TagChip key={tag} tag={tag} />
               ))}
             </div>
           ) : null}
@@ -194,23 +191,32 @@ export function DayView({
           ))}
 
           {/* Events */}
-          {eventPositions.map(({ event, top, height }) => (
-            <button
-              className="absolute right-2 left-16 cursor-pointer overflow-hidden rounded-md border border-teal-200 bg-teal-50 px-2 py-1 text-left text-xs transition hover:bg-teal-100"
-              key={event.id}
-              onClick={() => onEventClick(event)}
-              style={{ top, height }}
-              type="button"
-            >
-              <div className="flex items-center gap-1.5">
-                <span
-                  className={`h-1.5 w-1.5 shrink-0 rounded-full ${getPriorityColor(event.priority)}`}
-                />
-                <span className="truncate text-sm font-medium text-slate-800">{event.title}</span>
-              </div>
-              <div className="mt-0.5 truncate text-[11px] text-slate-500">{event.location}</div>
-            </button>
-          ))}
+          {eventPositions.map(({ event, top, height }) => {
+            const palette =
+              event.tags && event.tags.length > 0 ? getTagPalette(event.tags[0]) : UNTAGGED_PALETTE
+            const isHigh = event.priority === 'high'
+            return (
+              <button
+                className={`absolute right-2 left-16 cursor-pointer overflow-hidden rounded-md border ${palette.eventBg} ${palette.eventBorder} ${palette.eventHover} px-2 py-1 text-left text-xs transition ${
+                  isHigh ? 'ring-2 ring-rose-400/40' : ''
+                }`}
+                key={event.id}
+                onClick={() => onEventClick(event)}
+                style={{ top, height }}
+                type="button"
+              >
+                <div className="flex items-center gap-1.5">
+                  <span
+                    className={`h-1.5 w-1.5 shrink-0 rounded-full ${getPriorityColor(event.priority)}`}
+                  />
+                  <span className={`truncate text-sm font-medium ${palette.eventText}`}>
+                    {event.title}
+                  </span>
+                </div>
+                <div className="mt-0.5 truncate text-[11px] text-slate-500">{event.location}</div>
+              </button>
+            )
+          })}
         </div>
       </div>
     </div>
@@ -320,27 +326,36 @@ export function WeekView({
                 ))}
 
                 {/* Events */}
-                {eventPositions.map(({ event, top, height }) => (
-                  <button
-                    className="absolute right-0.5 left-0.5 cursor-pointer overflow-hidden rounded border border-teal-200 bg-teal-50 px-1.5 py-1 text-left transition hover:bg-teal-100"
-                    key={event.id}
-                    onClick={() => onEventClick(event)}
-                    style={{ top, height }}
-                    type="button"
-                  >
-                    <div className="flex items-center gap-1">
-                      <span
-                        className={`h-1.5 w-1.5 shrink-0 rounded-full ${getPriorityColor(event.priority)}`}
-                      />
-                      <span className="truncate text-xs font-semibold text-slate-800">
-                        {event.title}
-                      </span>
-                    </div>
-                    <div className="truncate text-[11px] text-slate-500">
-                      {formatTime(event.startTime)}
-                    </div>
-                  </button>
-                ))}
+                {eventPositions.map(({ event, top, height }) => {
+                  const palette =
+                    event.tags && event.tags.length > 0
+                      ? getTagPalette(event.tags[0])
+                      : UNTAGGED_PALETTE
+                  const isHigh = event.priority === 'high'
+                  return (
+                    <button
+                      className={`absolute right-0.5 left-0.5 cursor-pointer overflow-hidden rounded border ${palette.eventBg} ${palette.eventBorder} ${palette.eventHover} px-1.5 py-1 text-left transition ${
+                        isHigh ? 'ring-2 ring-rose-400/40' : ''
+                      }`}
+                      key={event.id}
+                      onClick={() => onEventClick(event)}
+                      style={{ top, height }}
+                      type="button"
+                    >
+                      <div className="flex items-center gap-1">
+                        <span
+                          className={`h-1.5 w-1.5 shrink-0 rounded-full ${getPriorityColor(event.priority)}`}
+                        />
+                        <span className={`truncate text-xs font-semibold ${palette.eventText}`}>
+                          {event.title}
+                        </span>
+                      </div>
+                      <div className="truncate text-[11px] text-slate-500">
+                        {formatTime(event.startTime)}
+                      </div>
+                    </button>
+                  )
+                })}
               </div>
             )
           })}

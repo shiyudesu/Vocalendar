@@ -18,7 +18,7 @@ import {
   Volume2,
   X,
 } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { MouseEvent as ReactMouseEvent } from 'react'
 
 import type { CalendarViewType } from './components/CalendarViews'
@@ -32,6 +32,7 @@ import { CreateEventModal, EventModal } from './components/EventModal'
 import { VoiceModal } from './components/VoiceModal'
 import { getEventsForDate, mockEvents, mockNotifications, mockUser } from './data/mock'
 import type { Event, Reminder } from './data/mock'
+import { getAllTagNames } from './lib/tags'
 
 type Page = 'calendar' | 'voice' | 'settings'
 
@@ -629,6 +630,8 @@ function App() {
     ? (events.find((e) => e.id === selectedEventId) ?? null)
     : null
 
+  const tagSuggestions = useMemo(() => getAllTagNames(events), [events])
+
   useEffect(() => {
     try {
       window.localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, String(sidebarWidth))
@@ -959,6 +962,7 @@ function App() {
           onClose={() => setSelectedEventId(null)}
           onDelete={() => deleteEvent(selectedEvent.id)}
           onUpdate={(patch) => updateEvent(selectedEvent.id, patch)}
+          tagSuggestions={tagSuggestions}
         />
       )}
 
@@ -970,6 +974,7 @@ function App() {
             createEvent(input)
             setShowCreateModal(false)
           }}
+          tagSuggestions={tagSuggestions}
         />
       )}
 
