@@ -83,17 +83,20 @@
 packages/
   api/
     src/
-      routes/
+      config/
+      http/
+        middleware/
+        routes/
+        utils/
       services/
       repositories/
-      integrations/
-      db/
       utils/
       index.ts
   web/
     src/
-      components/
+      App.tsx
       lib/
+      main.tsx
     vite.config.ts
   mobile/
     AGENTS.md
@@ -101,12 +104,6 @@ packages/
     ios/
     android/
   schemas/
-  shared/
-  config/
-tests/
-  unit/
-  integration/
-  e2e/
 docs/
 package.json
 pnpm-workspace.yaml
@@ -115,14 +112,17 @@ turbo.json
 
 ### 目录规则
 - `packages/api/` 放 Hono HTTP API、服务端领域服务和持久层逻辑
-- `packages/api/src/routes/` 放 Hono 路由，按资源组织 `/api/v1/*` 接口
+- `packages/api/src/http/routes/` 放 Hono 路由，按资源组织 `/api/v1/*` 接口
+- `packages/api/src/http/middleware/` 放跨路由中间件
+- `packages/api/src/http/utils/` 放 HTTP 响应封装和适配辅助
+- `packages/api/src/config/` 放服务端运行配置
 - `packages/api/src/services/` 放业务逻辑，不允许依赖前端页面组件
 - `packages/api/src/repositories/` 负责数据库读写
 - `packages/web/` 放 Vite React SPA、浏览器入口和前端交互逻辑，不放服务端业务逻辑
+- `packages/web/src/lib/` 放 API client 和前端工具函数
 - `packages/mobile/` 放 `Capacitor` 配置和原生工程壳体，`webDir` 指向 `packages/web` 的构建产物，不重复实现 Web UI 或后端契约
 - `packages/schemas/` 放前后端共享的 Zod schema
-- `packages/shared/` 只放跨应用共享的稳定类型与工具，不放端专属业务逻辑
-- `packages/config/` 放共享的 TypeScript、Rslint、Oxfmt 等工程配置
+- 仓库当前未引入独立的 `packages/shared/` 或 `packages/config/` 包；如后续新增，需先更新本文件说明职责边界
 
 ---
 
@@ -150,7 +150,7 @@ turbo.json
 ## 6.4 测试底线
 - 新增领域服务必须有单元测试
 - 新增 API 必须至少有一条成功路径和一条失败路径测试
-- 活跃版本的核心用户流程必须有端到端测试
+- 活跃模块的核心用户流程必须有端到端测试
 - 文档中承诺的验收标准，必须能映射到自动化测试或手动验证清单
 
 ---
@@ -187,6 +187,6 @@ turbo.json
 
 ## 9. 演进规则
 
-- 当某个版本需要新增能力时，优先复用现有事件模型和接口契约
+- 当某个模块需要新增能力时，优先复用现有事件模型和接口契约
 - 如果移动端接入，应复用同一套 API、共享 schema 和领域服务，而不是为移动端另起一套后端契约
-- 架构调整时，必须同步更新本文件和受影响的计划文档
+- 架构调整时，必须同步更新本文件和受影响的模块文档
