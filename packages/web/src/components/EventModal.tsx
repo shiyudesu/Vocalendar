@@ -3,7 +3,6 @@ import { useEffect, useState } from 'react'
 
 import { getPriorityColor, mockUser } from '../data/mock'
 import type { Attendee, Event, RecurrenceRule, Reminder } from '../data/mock'
-import { getAllTagNames } from '../lib/tags'
 import { TagChip } from './TagChip'
 import { TagInput } from './TagInput'
 

@@ -30,6 +30,7 @@ import {
 } from './components/CalendarViews'
 import { CreateEventModal, EventModal } from './components/EventModal'
 import { TagFilterBar } from './components/TagFilterBar'
+import { TagManager } from './components/TagManager'
 import { VoiceModal } from './components/VoiceModal'
 import { getEventsForDate, mockEvents, mockNotifications, mockUser } from './data/mock'
 import type { Event, Reminder } from './data/mock'
@@ -263,9 +264,19 @@ function UpcomingEvents({
 
 // ─── Settings Page ───
 
-function SettingsPage() {
+function SettingsPage({
+  events,
+  hiddenTags,
+  onRenameTag,
+  onDeleteTag,
+}: {
+  events: Event[]
+  hiddenTags: Set<string>
+  onRenameTag: (from: string, to: string) => void
+  onDeleteTag: (tag: string) => void
+}) {
   const [settings, setSettings] = useState(mockUser.settings)
-  const [activeTab, setActiveTab] = useState<'general' | 'voice' | 'account'>('general')
+  const [activeTab, setActiveTab] = useState<'general' | 'voice' | 'tags' | 'account'>('general')
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -280,6 +291,7 @@ function SettingsPage() {
           {[
             { id: 'general' as const, label: '通用', icon: Settings },
             { id: 'voice' as const, label: '语音', icon: Volume2 },
+            { id: 'tags' as const, label: '标签', icon: Tag },
             { id: 'account' as const, label: '账户', icon: Users },
           ].map((tab) => (
             <button
@@ -465,6 +477,15 @@ function SettingsPage() {
                 </div>
               </div>
             </div>
+          )}
+
+          {activeTab === 'tags' && (
+            <TagManager
+              events={events}
+              hiddenTags={hiddenTags}
+              onDelete={onDeleteTag}
+              onRename={onRenameTag}
+            />
           )}
 
           {activeTab === 'account' && (
@@ -767,6 +788,45 @@ function App() {
     setHiddenTags(new Set(tagSuggestions.filter((t) => t !== tag)))
   }
 
+  function renameTag(from: string, to: string) {
+    const target = to.trim()
+    if (!target || target === from) return
+    setEvents((arr) =>
+      arr.map((e) => {
+        if (!e.tags) return e
+        if (!e.tags.includes(from)) return e
+        const next = Array.from(new Set(e.tags.map((t) => (t === from ? target : t))))
+        return { ...e, tags: next, updatedAt: new Date() }
+      }),
+    )
+    setHiddenTags((prev) => {
+      const next = new Set(prev)
+      const wasHidden = next.delete(from)
+      if (wasHidden) next.add(target)
+      return next
+    })
+  }
+
+  function deleteTag(tag: string) {
+    setEvents((arr) =>
+      arr.map((e) => {
+        if (!e.tags || !e.tags.includes(tag)) return e
+        const filtered = e.tags.filter((t) => t !== tag)
+        return {
+          ...e,
+          tags: filtered.length > 0 ? filtered : undefined,
+          updatedAt: new Date(),
+        }
+      }),
+    )
+    setHiddenTags((prev) => {
+      if (!prev.has(tag)) return prev
+      const next = new Set(prev)
+      next.delete(tag)
+      return next
+    })
+  }
+
   function toggleNotifPanel() {
     setShowNotifPanel((prev) => {
       const next = !prev
@@ -1021,7 +1081,12 @@ function App() {
 
           {page === 'settings' && (
             <div className="h-full overflow-y-auto p-6">
-              <SettingsPage />
+              <SettingsPage
+                events={events}
+                hiddenTags={sanitizedHiddenTags}
+                onDeleteTag={deleteTag}
+                onRenameTag={renameTag}
+              />
             </div>
           )}
         </div>
