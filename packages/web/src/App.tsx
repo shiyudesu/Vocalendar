@@ -19,6 +19,7 @@ import {
   X,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import type { MouseEvent as ReactMouseEvent } from 'react'
 
 import type { CalendarViewType } from './components/CalendarViews'
 import {
@@ -49,9 +50,13 @@ function formatTime(date: Date): string {
 
 // ─── Notification Panel ───
 
-function NotificationPanel({ onClose }: { onClose: () => void }) {
-  const [notifs] = useState(mockNotifications)
-
+function NotificationPanel({
+  notifications,
+  onClose,
+}: {
+  notifications: typeof mockNotifications
+  onClose: () => void
+}) {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape') onClose()
@@ -74,16 +79,12 @@ function NotificationPanel({ onClose }: { onClose: () => void }) {
         </button>
       </div>
       <div className="max-h-80 overflow-y-auto">
-        {notifs.length === 0 ? (
+        {notifications.length === 0 ? (
           <div className="px-4 py-8 text-center text-sm text-slate-400">暂无通知</div>
         ) : (
-          notifs.map((n) => (
-            <div
-              className={`border-b border-slate-50 px-4 py-3 last:border-b-0 ${n.read ? '' : 'bg-teal-50/50'}`}
-              key={n.id}
-            >
+          notifications.map((n) => (
+            <div className="border-b border-slate-50 px-4 py-3 last:border-b-0" key={n.id}>
               <div className="flex items-start gap-2">
-                {!n.read && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-teal-500" />}
                 <div className="flex-1">
                   <p className="text-sm font-medium text-slate-800">{n.title}</p>
                   <p className="mt-0.5 text-xs text-slate-500">{n.message}</p>
@@ -591,6 +592,11 @@ function VoicePage() {
 
 // ─── Main App ───
 
+const SIDEBAR_DEFAULT_WIDTH = 240
+const SIDEBAR_MIN_WIDTH = 200
+const SIDEBAR_MAX_WIDTH = 480
+const SIDEBAR_WIDTH_STORAGE_KEY = 'vocalendar:sidebarWidth'
+
 function App() {
   const [page, setPage] = useState<Page>('calendar')
   const [calendarView, setCalendarView] = useState<CalendarViewType>('week')
@@ -600,6 +606,25 @@ function App() {
   const [showVoiceModal, setShowVoiceModal] = useState(false)
   const [showNotifPanel, setShowNotifPanel] = useState(false)
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false)
+  const [notifications, setNotifications] = useState(mockNotifications)
+  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
+    if (typeof window === 'undefined') return SIDEBAR_DEFAULT_WIDTH
+    const stored = window.localStorage.getItem(SIDEBAR_WIDTH_STORAGE_KEY)
+    const parsed = stored ? Number.parseInt(stored, 10) : SIDEBAR_DEFAULT_WIDTH
+    if (Number.isNaN(parsed)) return SIDEBAR_DEFAULT_WIDTH
+    return Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, parsed))
+  })
+  const [isResizingSidebar, setIsResizingSidebar] = useState(false)
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, String(sidebarWidth))
+    } catch {
+      // ignore quota / privacy errors
+    }
+  }, [sidebarWidth])
+
+  const hasUnreadNotif = notifications.some((n) => !n.read)
 
   function handleNavigate(direction: 'prev' | 'next') {
     setCurrentDate((d) => navigateDate(d, calendarView, direction))
@@ -618,6 +643,48 @@ function App() {
     setIsMobileNavOpen(false)
   }
 
+  function toggleNotifPanel() {
+    setShowNotifPanel((prev) => {
+      const next = !prev
+      if (next && hasUnreadNotif) {
+        setNotifications((arr) => arr.map((n) => ({ ...n, read: true })))
+      }
+      return next
+    })
+  }
+
+  function startSidebarResize(e: ReactMouseEvent<HTMLDivElement>) {
+    e.preventDefault()
+    const startX = e.clientX
+    const startWidth = sidebarWidth
+    setIsResizingSidebar(true)
+
+    function onMove(ev: MouseEvent) {
+      const next = Math.min(
+        SIDEBAR_MAX_WIDTH,
+        Math.max(SIDEBAR_MIN_WIDTH, startWidth + ev.clientX - startX),
+      )
+      setSidebarWidth(next)
+    }
+
+    function onUp() {
+      setIsResizingSidebar(false)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }
+
+  function resetSidebarWidth() {
+    setSidebarWidth(SIDEBAR_DEFAULT_WIDTH)
+  }
+
   return (
     <div className="flex h-screen bg-[#f6f7f9]">
       {/* Mobile sidebar backdrop */}
@@ -634,7 +701,8 @@ function App() {
       <aside
         className={`${
           isMobileNavOpen ? 'fixed inset-y-0 left-0 z-40 flex' : 'hidden md:flex'
-        } w-60 shrink-0 flex-col border-r border-slate-200 bg-white md:relative`}
+        } shrink-0 flex-col border-r border-slate-200 bg-white md:relative`}
+        style={{ width: isMobileNavOpen ? SIDEBAR_DEFAULT_WIDTH : sidebarWidth }}
       >
         {/* Logo */}
         <div className="flex items-center gap-2 px-4 py-4">
@@ -703,6 +771,22 @@ function App() {
             </div>
           </div>
         </div>
+
+        {/* Resize handle (desktop only) */}
+        <div
+          aria-label="拖动以调整侧边栏宽度，双击恢复默认"
+          aria-orientation="vertical"
+          aria-valuemax={SIDEBAR_MAX_WIDTH}
+          aria-valuemin={SIDEBAR_MIN_WIDTH}
+          aria-valuenow={sidebarWidth}
+          className={`absolute top-0 right-0 hidden h-full w-1.5 cursor-col-resize transition-colors md:block ${
+            isResizingSidebar ? 'bg-teal-400' : 'bg-transparent hover:bg-teal-200'
+          }`}
+          onDoubleClick={resetSidebarWidth}
+          onMouseDown={startSidebarResize}
+          role="separator"
+          tabIndex={-1}
+        />
       </aside>
 
       {/* Main Content */}
@@ -729,13 +813,13 @@ function App() {
             <div className="flex shrink-0 items-center gap-2">
               <CalendarViewSwitcher onChange={setCalendarView} view={calendarView} />
               <button
-                aria-label="通知"
+                aria-label={hasUnreadNotif ? '通知（有未读）' : '通知'}
                 className="relative ml-2 flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50"
-                onClick={() => setShowNotifPanel((v) => !v)}
+                onClick={toggleNotifPanel}
                 type="button"
               >
                 <Bell size={18} />
-                {mockNotifications.some((n) => !n.read) && (
+                {hasUnreadNotif && (
                   <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-rose-500" />
                 )}
               </button>
@@ -817,7 +901,9 @@ function App() {
 
       {showVoiceModal && <VoiceModal onClose={() => setShowVoiceModal(false)} />}
 
-      {showNotifPanel && <NotificationPanel onClose={() => setShowNotifPanel(false)} />}
+      {showNotifPanel && (
+        <NotificationPanel notifications={notifications} onClose={() => setShowNotifPanel(false)} />
+      )}
     </div>
   )
 }

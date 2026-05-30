@@ -176,16 +176,19 @@ export function DayView({
 
       <div className="relative flex-1 overflow-y-auto">
         <div className="relative min-h-[1536px]">
-          {/* Hour grid lines */}
+          {/* Hour grid lines + time labels */}
           {HOURS.map((hour) => (
-            <div
-              className="absolute right-0 left-14 flex items-center border-b border-slate-100"
-              key={hour}
-              style={{ top: hour * 64, height: 64 }}
-            >
-              <span className="absolute -top-2.5 left-0 w-12 pr-2 text-right text-xs text-slate-400">
+            <div key={hour}>
+              <span
+                className="absolute left-0 w-14 pr-2 text-right text-xs text-slate-400"
+                style={{ top: hour * 64 - 6 }}
+              >
                 {String(hour).padStart(2, '0')}:00
               </span>
+              <div
+                className="absolute right-0 left-16 border-b border-slate-100"
+                style={{ top: hour * 64, height: 64 }}
+              />
             </div>
           ))}
 
@@ -202,9 +205,9 @@ export function DayView({
                 <span
                   className={`h-1.5 w-1.5 shrink-0 rounded-full ${getPriorityColor(event.priority)}`}
                 />
-                <span className="truncate font-medium text-slate-800">{event.title}</span>
+                <span className="truncate text-sm font-medium text-slate-800">{event.title}</span>
               </div>
-              <div className="mt-0.5 truncate text-[10px] text-slate-500">{event.location}</div>
+              <div className="mt-0.5 truncate text-[11px] text-slate-500">{event.location}</div>
             </button>
           ))}
         </div>
@@ -316,7 +319,7 @@ export function WeekView({
                 {/* Events */}
                 {eventPositions.map(({ event, top, height }) => (
                   <button
-                    className="absolute right-0.5 left-0.5 cursor-pointer overflow-hidden rounded border border-teal-200 bg-teal-50 px-1 py-0.5 text-left transition hover:bg-teal-100"
+                    className="absolute right-0.5 left-0.5 cursor-pointer overflow-hidden rounded border border-teal-200 bg-teal-50 px-1.5 py-1 text-left transition hover:bg-teal-100"
                     key={event.id}
                     onClick={() => onEventClick(event)}
                     style={{ top, height }}
@@ -324,13 +327,13 @@ export function WeekView({
                   >
                     <div className="flex items-center gap-1">
                       <span
-                        className={`h-1 w-1 shrink-0 rounded-full ${getPriorityColor(event.priority)}`}
+                        className={`h-1.5 w-1.5 shrink-0 rounded-full ${getPriorityColor(event.priority)}`}
                       />
-                      <span className="truncate text-[11px] font-medium text-slate-800">
+                      <span className="truncate text-xs font-semibold text-slate-800">
                         {event.title}
                       </span>
                     </div>
-                    <div className="truncate text-[9px] text-slate-500">
+                    <div className="truncate text-[11px] text-slate-500">
                       {formatTime(event.startTime)}
                     </div>
                   </button>
