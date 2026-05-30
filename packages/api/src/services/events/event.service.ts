@@ -58,6 +58,13 @@ export function createEventFromDraft(draftId: string): CreateEventFromDraftResul
   }
 }
 
-export function listRecentEvents(limit: number) {
-  return eventMemoryRepository.listRecentEvents(Math.min(Math.max(limit, 1), 10))
+export function listRecentEvents(limit: number, offset: number) {
+  return eventMemoryRepository.listRecentEvents(
+    Math.min(Math.max(limit, 1), 100),
+    Math.max(offset, 0),
+  )
+}
+
+export function countEvents() {
+  return eventMemoryRepository.countEvents()
 }

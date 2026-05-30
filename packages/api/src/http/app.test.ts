@@ -307,6 +307,43 @@ describe('v0.1 API contract', () => {
     )
   })
 
+  test('supports recent list pagination with limit and offset', async () => {
+    eventMemoryRepository.reset()
+    const app = createApp()
+
+    for (const [index, title] of ['事件一', '事件二', '事件三'].entries()) {
+      const draftResponse = await app.request('/api/v1/drafts', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          sourceText: `明天上午${index + 9}点${title}`,
+          timezone: 'Asia/Shanghai',
+          referenceAt: '2026-05-29T02:00:00Z',
+          source: 'text',
+        }),
+      })
+      const draftPayload = (await draftResponse.json()) as DraftResponsePayload
+
+      const eventResponse = await app.request('/api/v1/events', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          draftId: draftPayload.data.draft.draftId,
+        }),
+      })
+
+      expect(eventResponse.status).toBe(200)
+    }
+
+    const recentResponse = await app.request('/api/v1/events?mode=recent&limit=2&offset=1')
+    const recentPayload = (await recentResponse.json()) as EventListResponsePayload
+
+    expect(recentResponse.status).toBe(200)
+    expect(recentPayload.data.total).toBe(3)
+    expect(recentPayload.data.items).toHaveLength(2)
+    expect(recentPayload.data.items.map((item) => item.title)).toEqual(['事件二', '事件一'])
+  })
+
   test('rejects draft updates when the draft is missing', async () => {
     eventMemoryRepository.reset()
     const app = createApp()

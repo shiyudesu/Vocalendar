@@ -37,6 +37,8 @@ export const eventDraftSchema = z.object({
   clarificationPrompt: z.string().nullable(),
 })
 
+export const eventStatusSchema = z.enum(['confirmed', 'cancelled', 'draft'])
+
 export const eventSchema = z.object({
   id: z.string().min(1),
   title: z.string().min(1),
@@ -47,9 +49,18 @@ export const eventSchema = z.object({
   location: z.string().min(1).nullable(),
   participants: z.array(z.string().min(1)),
   source: eventSourceSchema,
-  status: z.literal('confirmed'),
+  status: eventStatusSchema,
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
+})
+
+export const eventListItemSchema = z.object({
+  id: z.string().min(1),
+  title: z.string().min(1),
+  startAt: z.string().datetime(),
+  endAt: z.string().datetime().nullable(),
+  timezone: timezoneSchema,
+  location: z.string().min(1).nullable(),
 })
 
 export const createDraftRequestSchema = z.object({
@@ -106,16 +117,49 @@ export const listEventsQuerySchema = z.object({
   limit: z
     .preprocess(
       (value) => (value === undefined ? undefined : Number(value)),
-      z.number().int().min(1).default(5),
+      z.number().int().min(1).default(20),
     )
-    .transform((limit) => Math.min(limit, 10)),
+    .transform((limit) => Math.min(limit, 100)),
+  offset: z.preprocess(
+    (value) => (value === undefined ? undefined : Number(value)),
+    z.number().int().min(0).default(0),
+  ),
 })
+
+export const queryRangeSchema = z.enum(['today', 'tomorrow', 'week', 'month'])
+
+export const queryRequestSchema = z
+  .object({
+    range: queryRangeSchema.nullable().optional(),
+    from: z.string().datetime().nullable().optional(),
+    to: z.string().datetime().nullable().optional(),
+    keyword: z.string().trim().min(1).nullable().optional(),
+    limit: z.preprocess(
+      (value) => (value === undefined ? undefined : Number(value)),
+      z.number().int().min(1).max(100).default(20),
+    ),
+    offset: z.preprocess(
+      (value) => (value === undefined ? undefined : Number(value)),
+      z.number().int().min(0).default(0),
+    ),
+  })
+  .superRefine((value, ctx) => {
+    if (!value.range && !value.from && !value.to) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'At least one of range, from, or to is required.',
+        path: ['range'],
+      })
+    }
+  })
 
 export type EventDraftParsed = z.infer<typeof eventDraftParsedSchema>
 export type EventDraft = z.infer<typeof eventDraftSchema>
 export type Event = z.infer<typeof eventSchema>
+export type EventListItem = z.infer<typeof eventListItemSchema>
 export type CreateDraftRequest = z.infer<typeof createDraftRequestSchema>
 export type CreateEventRequest = z.infer<typeof createEventRequestSchema>
 export type UpdateDraftFields = z.infer<typeof updateDraftFieldsSchema>
 export type UpdateDraftRequest = z.infer<typeof updateDraftRequestSchema>
 export type ListEventsQuery = z.infer<typeof listEventsQuerySchema>
+export type QueryRequest = z.infer<typeof queryRequestSchema>
