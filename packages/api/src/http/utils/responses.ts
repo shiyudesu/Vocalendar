@@ -28,3 +28,20 @@ export function validationError(c: Context, details: unknown) {
     400,
   )
 }
+
+export function draftParseFailed(c: Context, details: unknown) {
+  return c.json(
+    {
+      error: {
+        code: 'DRAFT_PARSE_FAILED',
+        message: 'Source text cannot be parsed into a valid draft.',
+        details,
+      },
+      meta: {
+        requestId: c.req.header('x-request-id') ?? 'dev-request',
+        timestamp: nowIso(),
+      },
+    },
+    422,
+  )
+}
