@@ -1,7 +1,11 @@
 import { createEventRequestSchema, listEventsQuerySchema } from '@vocalendar/schemas'
 import { Hono } from 'hono'
 
-import { createEventFromDraft, listRecentEvents } from '../../services/events/event.service.js'
+import {
+  countEvents,
+  createEventFromDraft,
+  listRecentEvents,
+} from '../../services/events/event.service.js'
 import { draftMissingFields, notFound, ok, validationError } from '../utils/responses.js'
 
 export const eventRoutes = new Hono()
@@ -13,11 +17,11 @@ eventRoutes.get('/', (c) => {
     return validationError(c, result.error.flatten())
   }
 
-  const events = listRecentEvents(result.data.limit)
+  const events = listRecentEvents(result.data.limit, result.data.offset)
 
   return ok(c, {
     items: events,
-    total: events.length,
+    total: countEvents(),
   })
 })
 

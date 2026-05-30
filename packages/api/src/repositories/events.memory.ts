@@ -18,8 +18,12 @@ export const eventMemoryRepository = {
     return event
   },
 
-  listRecentEvents(limit: number) {
-    return events.slice(0, limit)
+  listRecentEvents(limit: number, offset = 0) {
+    return events.slice(offset, offset + limit)
+  },
+
+  countEvents() {
+    return events.length
   },
 
   reset() {
