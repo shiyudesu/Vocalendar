@@ -4,231 +4,246 @@
 
 本文件约束 AI Agent 和开发者在 Vocalendar 仓库中的协作方式。它不重复产品需求，只定义：
 
-1. **文档体系**：什么信息存在哪个文件里，禁止重复维护
-2. **工作流**：改动前的必读顺序、计划先行、代码与文档同步规则
-3. **工程底线**：目录规范、验证要求、Git 规范
+1. 文档体系：什么信息存在哪个文件里，避免重复维护
+2. 工作流：改动前读什么、什么时候先补文档、什么时候先写计划
+3. 工程底线：当前仓库结构、验证要求、Git 规范
 
-开始任何非微小改动前，先读本章，再按顺序读对应文档。
+开始任何非微小改动前，先读本文件，再按下面顺序读取。
 
 ---
 
 ## 2. 必读顺序
 
-按以下顺序读取，缺什么补什么，不要跳过：
+按当前仓库实际文件读取，不要引用不存在的文档：
 
-1. **`docs/prd.md`** — 产品目标、范围、版本路线。如果它和你的任务冲突，先确认是不是要改 PRD
-2. **`docs/api-spec.md`** — API 契约入口与同步规则
-3. **`packages/api/openapi.yaml`** — 如果需要动接口，必须读目标态契约
+1. `docs/prd.md`
+   - 产品目标、范围、里程碑、当前版本阶段
+2. `docs/modules/api.md`
+   - 当前唯一已建立的模块计划文档
+   - 只要改 API、语音链路、智能建议、同步能力或与这些能力相关的前端行为，都应先读
+3. `docs/api-spec.md`
+   - API 通用规范、全量接口契约、错误码、Sync / Realtime / Voice 相关接口边界
+4. 包内 `AGENTS.md`
+   - 修改 `packages/api/**` 前读 `packages/api/AGENTS.md`
+   - 修改 `packages/mobile/**` 前读 `packages/mobile/AGENTS.md`
+
+说明：
+
+- 当前仓库没有 `docs/architecture.md`
+- 当前仓库没有 `packages/api/openapi.yaml`
+- 不要再把它们当作必读文件或事实来源
 
 ---
 
 ## 3. 文档单一事实来源
 
-| 主题                                 | 唯一存放位置                   | 禁止重复到              |
-| ------------------------------------ | ------------------------------ | ----------------------- |
-| 产品目标、用户场景、里程碑           | `docs/prd.md`                  | 代码注释、其他 Markdown |
-| API 通用规范、全局错误结构、分页规则 | `docs/api-spec.md`             | 代码注释                |
-| 全量接口字段级契约                   | `packages/api/openapi.yaml`    | 任何 Markdown           |
-| 技术栈、目录规范、编码底线           | `docs/architecture.md`（待建） | 各代码包 README         |
+| 主题 | 唯一存放位置 | 不应重复到 |
+| --- | --- | --- |
+| 产品目标、用户场景、里程碑 | `docs/prd.md` | 代码注释、其他 Markdown |
+| API 模块范围、阶段边界、开发任务拆分 | `docs/modules/api.md` | `docs/prd.md`、代码注释 |
+| API 通用规范、接口路径、请求响应结构、错误码、Sync / Realtime / Voice 契约 | `docs/api-spec.md` | 其他 Markdown、零散注释 |
+| API 包内部目录边界 | `packages/api/AGENTS.md` | 根文档的字段级细节 |
+| Mobile 包内部边界 | `packages/mobile/AGENTS.md` | 根文档的字段级细节 |
 
-**核心规则**：
+核心规则：
 
-- 改接口字段、路径、错误码 → 同时改 `openapi.yaml`
-- 改产品目标或里程碑 → 同时改 `docs/prd.md`
-- 同一变更涉及多个维度，在同一个 commit/PR 里同步更新所有相关文档
+- 改产品目标、版本阶段、是否把某能力提前到 MVP / V1.0 / V1.5 / V2.0
+  - 同时更新 `docs/prd.md`
+- 改 API 模块范围、任务拆分、阶段职责
+  - 同时更新 `docs/modules/api.md`
+- 改接口路径、字段、错误码、分页、鉴权、WebSocket / Sync 协议
+  - 同时更新 `docs/api-spec.md`
+- 同一变更涉及多个维度时，必须在同一个变更里同步更新相关文档
 
 ---
 
-## 4. 计划先行
+## 4. 当前仓库状态认知
 
-### 4.1 什么时候必须写计划
+当前仓库代码与文档的关系如下：
 
-以下改动开始前，必须有书面计划（可以是 PRD 新增章节、代码包内的 PLAN.md、或详细的设计评论）：
+- 当前代码实现主要覆盖 `v0.1` 的文本草稿解析与基础事件闭环
+- `docs/api-spec.md` 描述的是更完整的目标态 API 契约
+- 如果代码现状落后于契约，应让实现向契约对齐
+- 不要为了迁就当前代码而直接收缩 `docs/api-spec.md`，除非用户明确决定缩减产品范围，并同步修改 `docs/prd.md`
 
-- 新功能开发（涉及新增接口或页面）
-- 较大重构（移动目录、重命名核心类型、调整数据流）
-- 跨包改动（同时改 api + web，或 schemas + api）
+---
 
-### 4.2 计划至少包含什么
+## 5. 计划先行
 
-1. **范围边界**：做什么、不做什么，边界在哪里
-2. **代码映射**：改哪些文件/目录，新增什么
-3. **接口变更**：如果有，列出路径、方法、请求/响应结构变化
-4. **验收标准**：怎么算完成，必须可验证（如"`GET /events?startDate=...` 返回正确数据"、"前端日视图真实渲染 API 数据而非 mock"）
-5. **依赖与阻塞**：依赖哪些已有能力，当前卡在哪
+### 5.1 什么时候必须先补计划或模块文档
 
-### 4.3 禁止
+以下改动开始前，必须先补书面计划或更新 `docs/modules/api.md`：
+
+- 新增接口
+- 改已有接口路径、字段或错误码
+- 跨包改动（如 `schemas + api`、`api + web`、`web + mobile`）
+- 语音链路改动（ASR、TTS、VAD 边界、快捷指令、语音历史）
+- 智能能力改动（冲突检测、习惯建议、交通时间建议）
+- 多端同步或离线同步改动
+
+### 5.2 计划至少要写清楚
+
+1. 范围边界：做什么，不做什么
+2. 代码映射：改哪些文件、增哪些文件
+3. 文档映射：要同步改哪份文档
+4. 接口变化：路径、方法、请求 / 响应变化
+5. 验收标准：必须能验证
+6. 依赖与阻塞：依赖当前哪些能力，缺什么
+
+### 5.3 禁止
 
 - 在没有书面计划的情况下展开大功能开发
-- 用临时实现绕开已定义的接口契约
-- 引入超出当前任务范围的功能膨胀
+- 用临时实现绕开 `docs/api-spec.md`
+- 把 `V1.5` / `V2.0` 的范围偷偷塞进 MVP 实现
 
 ---
 
-## 5. 工程底线
+## 6. 工程底线
 
-### 5.1 目录与代码规范
+### 6.1 当前目录与职责
 
-Monorepo 目录不可随意改动：
+- `packages/api/`
+  - Hono API 服务
+  - 当前入口：`packages/api/src/index.ts`
+  - 当前主要实现位于 `http/routes`、`services`、`repositories`
+- `packages/web/`
+  - Vite React 前端
+  - 当前 dev / preview 端口：`8060`
+- `packages/mobile/`
+  - Capacitor 壳体
+  - `webDir` 指向 `../web/dist`
+- `packages/schemas/`
+  - 共享 Zod schema 与 TypeScript 类型
+  - 当前导出入口：`packages/schemas/src/index.ts`
+- `docs/`
+  - 当前存在的核心文档只有：
+    - `docs/prd.md`
+    - `docs/modules/api.md`
+    - `docs/api-spec.md`
 
-- `packages/api/` — 后端 Hono API（端口 8061）
-- `packages/web/` — Vite React 前端（端口 8060）
-- `packages/mobile/` — Capacitor 移动端壳体，承载 web 构建产物
-- `packages/schemas/` — 共享 Zod schema 与 TypeScript 类型
+### 6.2 端口与调用关系
 
-其他底线：
+- Web dev 端口：`8060`
+- API dev 端口：`8061`
+- API 默认读取 `PORT`，未设置时走 `8061`
+- Web 与 Mobile 都通过配置化 API base URL 调用 API
+- 不要依赖只在本地有效的代理约定来定义接口行为
 
-- `packages/mobile` 通过配置化 API base URL 调用 API，不硬编码
-- 不在 UI 组件中写复杂业务规则
+### 6.3 代码边界
+
+- 不在 UI 组件里写复杂业务规则
+- Route handler 只做校验、编排和错误映射
+- 业务规则优先放 `services/`
+- 共享输入输出优先放 `packages/schemas`
 - 不跳过输入校验、错误码设计和基本测试
 
-### 5.2 接口一致性
+---
 
-- 保持接口行为与 `packages/api/openapi.yaml` 一致
-- 当前代码实现落后于契约时，以实现向契约对齐为准，不收缩契约来迁就代码
+## 7. 验证要求
+
+### 7.1 一般要求
+
+- 运行 `pnpm` 命令时需要提权，不要在沙箱中直接运行
+- 不要宣称“完成”或“已通过”，除非已经跑过对应验证
+- 文档改动至少检查文件结构、命名、引用路径
+
+### 7.2 当前脚本与推荐验证
+
+| 位置 | 命令 | 何时运行 |
+| --- | --- | --- |
+| 根目录 | `pnpm check` | 跨包改动后 |
+| 根目录 | `pnpm fix` | 需要统一自动修复时 |
+| `packages/api` | `pnpm --filter @vocalendar/api check` | 改 API 代码后 |
+| `packages/api` | `pnpm --filter @vocalendar/api test` | 改 route / service / repository / schema 行为后 |
+| `packages/api` | `pnpm --filter @vocalendar/api build` | 改入口、构建、运行配置后 |
+| `packages/web` | `pnpm --filter @vocalendar/web check` | 改 Web 代码后 |
+| `packages/web` | `pnpm --filter @vocalendar/web build` | 改 Vite 配置或产物相关行为后 |
+| `packages/schemas` | `pnpm --filter @vocalendar/schemas check` | 改共享 schema 后 |
+| `packages/schemas` | `pnpm --filter @vocalendar/schemas test` | 改共享 schema 行为后 |
+| `packages/mobile` | `pnpm --filter @vocalendar/mobile check` | 改 mobile 代码后 |
+| `packages/mobile` | `pnpm --filter @vocalendar/mobile build` | 改 Capacitor 配置或平台同步后 |
+
+### 7.3 文档改动的最低检查
+
+- 文档路径存在
+- 相互引用路径正确
+- 不再引用仓库中不存在的文档或契约文件
 
 ---
 
-## 6. 验证要求
+## 8. Git Commit 规范
 
-### 6.1 代码改动
+### 8.1 提交格式
 
-至少运行与改动直接相关的验证（不要在沙箱中运行，请提权）：
-
-| 包                 | 验证命令     | 说明            |
-| ------------------ | ------------ | --------------- |
-| `packages/web`     | `pnpm check` | 类型检查 + lint |
-| `packages/web`     | `pnpm fix`   | 自动修复        |
-| `packages/api`     | `pnpm check` | 类型检查 + lint |
-| `packages/api`     | `pnpm test`  | 单元/集成测试   |
-| `packages/schemas` | `pnpm check` | 类型检查 + lint |
-| 根目录             | `pnpm check` | 全仓库检查      |
-
-### 6.2 文档改动
-
-至少检查文件结构、命名和引用路径正确。
-
----
-
-## 7. Git Commit 规范
-
-### 7.1 提交格式
-
-```
+```text
 <type>(<scope>): <subject>
 ```
 
 例如：
 
-```
+```text
 feat(api): 支持 POST /drafts 自然语言解析
 fix(web): 修正日期选择器时区偏移问题
-docs(api-spec): 补充草稿确认接口错误码
-refactor(services): 将解析逻辑抽离到 domain/parser
-test(drafts): 补全缺失标题字段的边界用例
-chore(deps): 升级 drizzle-orm 至 0.30.x
+docs(api-spec): 补充快捷指令接口契约
+refactor(services): 抽离草稿补问逻辑
+test(schemas): 补全事件草稿边界用例
+chore(deps): 升级 hono 至 4.12.x
 ```
 
-### 7.2 类型（type）
+### 8.2 类型（type）
 
-| 类型       | 含义                           | 示例                                        |
-| ---------- | ------------------------------ | ------------------------------------------- |
-| `feat`     | 新功能                         | 新增 API 路由、页面组件                     |
-| `fix`      | Bug 修复                       | 修复解析错误、UI 显示异常                   |
-| `docs`     | 仅文档变动                     | 更新 prd.md、api-spec.md、plan              |
-| `style`    | 不影响代码逻辑的格式变动       | Oxfmt、Rslint 自动格式化                    |
-| `refactor` | 重构（既不是 feat 也不是 fix） | 函数提取、目录迁移、重命名                  |
-| `perf`     | 性能优化                       | 减少重复查询、优化 bundle 体积              |
-| `test`     | 测试相关                       | 新增/修改单元测试、e2e 测试                 |
-| `chore`    | 构建/工具/依赖变动             | 升级依赖、调整 CI 配置、pnpm workspace 变更 |
-| `ci`       | 持续集成配置变动               | GitHub Actions、部署脚本                    |
-| `revert`   | 回滚提交                       | 回滚某次有问题的 commit                     |
+| 类型 | 含义 |
+| --- | --- |
+| `feat` | 新功能 |
+| `fix` | Bug 修复 |
+| `docs` | 文档变更 |
+| `style` | 纯格式变更 |
+| `refactor` | 重构 |
+| `perf` | 性能优化 |
+| `test` | 测试相关 |
+| `chore` | 构建、工具、依赖 |
+| `ci` | CI 配置 |
+| `revert` | 回滚 |
 
-### 7.3 作用域（scope）
+### 8.3 作用域（scope）
 
-- `api` — Hono API routes、服务层
-- `web` — Vite React 前端页面与组件
-- `mobile` — Capacitor 移动端壳体
-- `schemas` — `packages/schemas` 共享 Zod schema 与类型
-- `services` — 领域服务层
-- `db` / `orm` — 数据库、迁移、ORM 配置
-- `parser` — 时间/文本解析相关
-- `deps` — 依赖升级（可省略具体模块）
-- `*` — 跨多个模块的大范围改动
+- `api`
+- `web`
+- `mobile`
+- `schemas`
+- `services`
+- `parser`
+- `deps`
+- `*`
 
-### 7.4 主题（subject）
+### 8.4 主题（subject）
 
-- 使用祈使句，描述**做了什么**而非做过了什么
-- 首字母小写，句尾不加句号
+- 使用祈使句
+- 首字母小写
+- 句尾不加句号
 - 控制在 50 个字符以内
-- 必须能独立理解，不依赖上下文
-
-正确示例：
-
-- `feat(api): 支持 POST /drafts 自然语言解析`
-- `fix(web): 修正 AllDay 事件跨天显示逻辑`
-
-错误示例：
-
-- ~~`feat(api): Added draft parse API`~~（过去时、英文与项目语言不一致）
-- ~~`fix(web): bugfix.`~~（无信息量、带句号）
-
-### 7.5 正文与脚注（可选）
-
-当需要说明背景、影响面或关联 issue 时：
-
-```
-feat(api): 接入 chrono-node 做基础时间解析
-
-- 用 chrono-node 替换手写正则，覆盖 ISO、相对时间等常见格式
-- 服务层保留中文规则引擎作为 fallback
-- 暂不处理农历和节假日别名
-
-Closes #12
-```
-
-正文规则：
-
-- 每行不超过 72 个字符
-- 使用 `-` 列表说明具体改动点
-- 说明**为什么**做这次改动，而不仅是**做了什么**
-- 关联 issue/PR 使用 `Closes #xxx`、`Refs #xxx`
-
-### 7.6 多模块改动的处理
-
-- **优先拆分成多个独立提交**：文档更新、代码实现、测试补充分别提交
-- 若必须合并提交，在正文中分模块说明
-- 禁止将无关改动（如格式化、功能代码、文档）混入同一个 `feat` 或 `fix` 提交
+- 必须能脱离上下文理解
 
 ---
 
-## 8. PR（Pull Request）规范
+## 9. PR 规范
 
-### 8.1 基本原则
+- 每个 PR 只做一件事
+- 大功能拆成多个独立 PR
+- PR 描述至少说明：
+  - 改了什么
+  - 为什么改
+  - 接口 / 行为影响
+  - 如何验证
 
-- 请基于 PR 添加新功能
-- 每个 PR 只做一件事；鼓励尽可能小、粒度尽可能细的 PR
-- 大功能应拆分为多个独立 PR 分步提交
-
-### 8.2 标题与描述
-
-PR 标题与描述需清晰完整：
-
-- **标题**：一句话说明本 PR 新增/修改了什么
-- **功能描述**：说明该功能的作用与使用方式
-- **实现思路**：简要说明技术选型或核心实现逻辑
-- **测试方式**：如何验证该功能正常运行
-
-### 8.3 合并要求
-
-PR 合并后，主分支代码需保持可运行状态，任意时间查看应能复现演示效果。
+如果改动影响 `docs/prd.md`、`docs/modules/api.md`、`docs/api-spec.md` 中任一文件，PR 描述里应明确写出同步点。
 
 ---
 
-## 9. 禁止事项
+## 10. 禁止事项
 
-- 未经文档更新直接改变产品范围或接口契约
-- 在没有书面计划的情况下展开大功能开发
-- 让 `prd.md`、`api-spec.md` 重复维护同一细节
-- 引入超出当前任务范围的功能膨胀
-- 用临时实现绕开已定义的接口契约
+- 引用不存在的文档作为规则来源
+- 在未更新文档的情况下直接改产品范围或接口契约
+- 让 `docs/prd.md`、`docs/modules/api.md`、`docs/api-spec.md` 长期重复维护同一细节
+- 把 mock 行为当作真实能力宣称完成
+- 用当前代码现状倒逼文档收缩，而不先确认是否要改产品范围
