@@ -6,6 +6,7 @@ import {
   Clock,
   Home,
   MapPin,
+  Menu,
   Mic,
   Moon,
   Plus,
@@ -17,7 +18,7 @@ import {
   Volume2,
   X,
 } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import type { CalendarViewType } from './components/CalendarViews'
 import {
@@ -28,12 +29,7 @@ import {
 } from './components/CalendarViews'
 import { CreateEventModal, EventModal } from './components/EventModal'
 import { VoiceModal } from './components/VoiceModal'
-import {
-  getEventsForDate,
-  mockEvents,
-  mockNotifications,
-  mockUser,
-} from './data/mock'
+import { getEventsForDate, mockEvents, mockNotifications, mockUser } from './data/mock'
 import type { Event } from './data/mock'
 
 type Page = 'calendar' | 'voice' | 'settings'
@@ -56,11 +52,20 @@ function formatTime(date: Date): string {
 function NotificationPanel({ onClose }: { onClose: () => void }) {
   const [notifs] = useState(mockNotifications)
 
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
   return (
     <div className="absolute top-14 right-4 z-40 w-80 rounded-xl border border-slate-200 bg-white shadow-xl">
       <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
         <h3 className="font-semibold text-slate-900">通知</h3>
         <button
+          aria-label="关闭"
           className="text-slate-400 transition hover:text-slate-600"
           onClick={onClose}
           type="button"
@@ -70,9 +75,7 @@ function NotificationPanel({ onClose }: { onClose: () => void }) {
       </div>
       <div className="max-h-80 overflow-y-auto">
         {notifs.length === 0 ? (
-          <div className="px-4 py-8 text-center text-sm text-slate-400">
-            暂无通知
-          </div>
+          <div className="px-4 py-8 text-center text-sm text-slate-400">暂无通知</div>
         ) : (
           notifs.map((n) => (
             <div
@@ -80,17 +83,11 @@ function NotificationPanel({ onClose }: { onClose: () => void }) {
               key={n.id}
             >
               <div className="flex items-start gap-2">
-                {!n.read && (
-                  <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-teal-500" />
-                )}
+                {!n.read && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-teal-500" />}
                 <div className="flex-1">
-                  <p className="text-sm font-medium text-slate-800">
-                    {n.title}
-                  </p>
+                  <p className="text-sm font-medium text-slate-800">{n.title}</p>
                   <p className="mt-0.5 text-xs text-slate-500">{n.message}</p>
-                  <p className="mt-1 text-[11px] text-slate-400">
-                    {formatTime(n.time)}
-                  </p>
+                  <p className="mt-1 text-[11px] text-slate-400">{formatTime(n.time)}</p>
                 </div>
               </div>
             </div>
@@ -147,6 +144,7 @@ function MiniCalendar({
     <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
       <div className="mb-2 flex items-center justify-between">
         <button
+          aria-label="上一月"
           className="flex h-6 w-6 items-center justify-center rounded text-slate-500 transition hover:bg-slate-100"
           onClick={() => setDisplayMonth(new Date(year, month - 1, 1))}
           type="button"
@@ -157,6 +155,7 @@ function MiniCalendar({
           {year}年{month + 1}月
         </span>
         <button
+          aria-label="下一月"
           className="flex h-6 w-6 items-center justify-center rounded text-slate-500 transition hover:bg-slate-100"
           onClick={() => setDisplayMonth(new Date(year, month + 1, 1))}
           type="button"
@@ -166,10 +165,7 @@ function MiniCalendar({
       </div>
       <div className="grid grid-cols-7 gap-0.5">
         {weekDays.map((d) => (
-          <div
-            className="py-1 text-center text-[10px] font-medium text-slate-400"
-            key={d}
-          >
+          <div className="py-1 text-center text-[10px] font-medium text-slate-400" key={d}>
             {d}
           </div>
         ))}
@@ -223,7 +219,7 @@ function UpcomingEvents({ onEventClick }: { onEventClick: (e: Event) => void }) 
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-      <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
+      <h4 className="mb-2 text-xs font-semibold tracking-wider text-slate-400 uppercase">
         即将到来
       </h4>
       <div className="flex flex-col gap-2">
@@ -238,9 +234,7 @@ function UpcomingEvents({ onEventClick }: { onEventClick: (e: Event) => void }) 
               <span>{event.startTime.getDate()}</span>
             </div>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-xs font-medium text-slate-800">
-                {event.title}
-              </p>
+              <p className="truncate text-xs font-medium text-slate-800">{event.title}</p>
               <p className="text-[10px] text-slate-500">
                 {formatTime(event.startTime)}
                 {event.location ? ` · ${event.location}` : ''}
@@ -321,9 +315,7 @@ function SettingsPage() {
                             : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
                         }`}
                         key={opt.value}
-                        onClick={() =>
-                          setSettings((s) => ({ ...s, theme: opt.value }))
-                        }
+                        onClick={() => setSettings((s) => ({ ...s, theme: opt.value }))}
                         type="button"
                       >
                         <opt.icon size={14} />
@@ -412,9 +404,7 @@ function SettingsPage() {
                         settings.voiceFeedback ? 'translate-x-5.5' : 'translate-x-0.5'
                       }`}
                       style={{
-                        transform: settings.voiceFeedback
-                          ? 'translateX(22px)'
-                          : 'translateX(2px)',
+                        transform: settings.voiceFeedback ? 'translateX(22px)' : 'translateX(2px)',
                       }}
                     />
                   </button>
@@ -478,21 +468,15 @@ function SettingsPage() {
                   {mockUser.name[0]}
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-slate-900">
-                    {mockUser.name}
-                  </p>
+                  <p className="text-sm font-semibold text-slate-900">{mockUser.name}</p>
                   <p className="text-sm text-slate-500">{mockUser.email}</p>
-                  <p className="mt-1 text-xs text-slate-400">
-                    时区：{mockUser.timezone}
-                  </p>
+                  <p className="mt-1 text-xs text-slate-400">时区：{mockUser.timezone}</p>
                 </div>
               </div>
 
               <div className="space-y-3">
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-slate-700">
-                    显示名称
-                  </label>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">显示名称</label>
                   <input
                     className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
                     defaultValue={mockUser.name}
@@ -500,9 +484,7 @@ function SettingsPage() {
                   />
                 </div>
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-slate-700">
-                    邮箱
-                  </label>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">邮箱</label>
                   <input
                     className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
                     defaultValue={mockUser.email}
@@ -556,9 +538,7 @@ function VoicePage() {
           <Mic size={36} className="text-teal-600" />
         </div>
         <h2 className="text-2xl font-bold text-slate-900">语音助手</h2>
-        <p className="mt-2 text-slate-500">
-          用自然语言快速创建、查询和修改日程
-        </p>
+        <p className="mt-2 text-slate-500">用自然语言快速创建、查询和修改日程</p>
       </div>
 
       <button
@@ -593,13 +573,7 @@ function VoicePage() {
       <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <h3 className="mb-4 text-sm font-semibold text-slate-800">快捷指令</h3>
         <div className="flex flex-wrap gap-2">
-          {[
-            '我到家了',
-            '会议延期 15 分钟',
-            '会议取消',
-            '今天有什么安排',
-            '下周日程',
-          ].map((cmd) => (
+          {['我到家了', '会议延期 15 分钟', '会议取消', '今天有什么安排', '下周日程'].map((cmd) => (
             <span
               className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-600"
               key={cmd}
@@ -610,9 +584,7 @@ function VoicePage() {
         </div>
       </div>
 
-      {showVoiceModal && (
-        <VoiceModal onClose={() => setShowVoiceModal(false)} />
-      )}
+      {showVoiceModal && <VoiceModal onClose={() => setShowVoiceModal(false)} />}
     </div>
   )
 }
@@ -627,6 +599,7 @@ function App() {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showVoiceModal, setShowVoiceModal] = useState(false)
   const [showNotifPanel, setShowNotifPanel] = useState(false)
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false)
 
   function handleNavigate(direction: 'prev' | 'next') {
     setCurrentDate((d) => navigateDate(d, calendarView, direction))
@@ -640,10 +613,29 @@ function App() {
     setSelectedEvent(event)
   }
 
+  function navigateToPage(p: Page) {
+    setPage(p)
+    setIsMobileNavOpen(false)
+  }
+
   return (
     <div className="flex h-screen bg-[#f6f7f9]">
+      {/* Mobile sidebar backdrop */}
+      {isMobileNavOpen && (
+        <button
+          aria-label="关闭菜单"
+          className="fixed inset-0 z-30 bg-black/40 md:hidden"
+          onClick={() => setIsMobileNavOpen(false)}
+          type="button"
+        />
+      )}
+
       {/* Sidebar */}
-      <aside className="flex w-60 shrink-0 flex-col border-r border-slate-200 bg-white">
+      <aside
+        className={`${
+          isMobileNavOpen ? 'fixed inset-y-0 left-0 z-40 flex' : 'hidden md:flex'
+        } w-60 shrink-0 flex-col border-r border-slate-200 bg-white md:relative`}
+      >
         {/* Logo */}
         <div className="flex items-center gap-2 px-4 py-4">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-900 text-white">
@@ -673,12 +665,10 @@ function App() {
           ].map((item) => (
             <button
               className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm font-medium transition ${
-                page === item.id
-                  ? 'bg-slate-900 text-white'
-                  : 'text-slate-600 hover:bg-slate-100'
+                page === item.id ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'
               }`}
               key={item.id}
-              onClick={() => setPage(item.id)}
+              onClick={() => navigateToPage(item.id)}
               type="button"
             >
               <item.icon size={18} />
@@ -689,7 +679,7 @@ function App() {
 
         {/* Mini Calendar - only show on calendar page */}
         {page === 'calendar' && (
-          <div className="px-3 pb-3 space-y-3">
+          <div className="space-y-3 px-3 pb-3">
             <MiniCalendar
               currentDate={currentDate}
               onSelectDate={(d) => {
@@ -708,44 +698,49 @@ function App() {
               {mockUser.name[0]}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-xs font-semibold text-slate-800">
-                {mockUser.name}
-              </p>
-              <p className="truncate text-[10px] text-slate-500">
-                {mockUser.email}
-              </p>
+              <p className="truncate text-xs font-semibold text-slate-800">{mockUser.name}</p>
+              <p className="truncate text-[10px] text-slate-500">{mockUser.email}</p>
             </div>
           </div>
         </div>
       </aside>
 
       {/* Main Content */}
-      <main className="flex flex-1 flex-col min-w-0">
+      <main className="flex min-w-0 flex-1 flex-col">
         {/* Top bar */}
         {page === 'calendar' && (
-          <header className="flex items-center justify-between border-b border-slate-200 bg-white px-6 py-3">
-            <DateNavigator
-              date={currentDate}
-              onNavigate={handleNavigate}
-              onToday={handleToday}
-              view={calendarView}
-            />
-            <div className="flex items-center gap-2">
-              <CalendarViewSwitcher
-                onChange={setCalendarView}
+          <header className="flex items-center justify-between gap-2 border-b border-slate-200 bg-white px-4 py-3 md:px-6">
+            <div className="flex min-w-0 items-center gap-2">
+              <button
+                aria-label="打开菜单"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 md:hidden"
+                onClick={() => setIsMobileNavOpen(true)}
+                type="button"
+              >
+                <Menu size={18} />
+              </button>
+              <DateNavigator
+                date={currentDate}
+                onNavigate={handleNavigate}
+                onToday={handleToday}
                 view={calendarView}
               />
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <CalendarViewSwitcher onChange={setCalendarView} view={calendarView} />
               <button
-                className="ml-2 flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50"
+                aria-label="通知"
+                className="relative ml-2 flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50"
                 onClick={() => setShowNotifPanel((v) => !v)}
                 type="button"
               >
                 <Bell size={18} />
                 {mockNotifications.some((n) => !n.read) && (
-                  <span className="absolute top-2.5 right-6.5 h-2 w-2 rounded-full bg-rose-500" />
+                  <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-rose-500" />
                 )}
               </button>
               <button
+                aria-label="语音助手"
                 className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50"
                 onClick={() => setShowVoiceModal(true)}
                 type="button"
@@ -757,13 +752,24 @@ function App() {
         )}
 
         {page !== 'calendar' && (
-          <header className="flex items-center justify-between border-b border-slate-200 bg-white px-6 py-3">
-            <h1 className="text-xl font-bold text-slate-900">
-              {page === 'voice' && '语音助手'}
-              {page === 'settings' && '设置'}
-            </h1>
+          <header className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3 md:px-6">
             <div className="flex items-center gap-2">
               <button
+                aria-label="打开菜单"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 md:hidden"
+                onClick={() => setIsMobileNavOpen(true)}
+                type="button"
+              >
+                <Menu size={18} />
+              </button>
+              <h1 className="text-xl font-bold text-slate-900">
+                {page === 'voice' && '语音助手'}
+                {page === 'settings' && '设置'}
+              </h1>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                aria-label="语音助手"
                 className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50"
                 onClick={() => setShowVoiceModal(true)}
                 type="button"
@@ -803,27 +809,15 @@ function App() {
       </main>
 
       {/* Modals */}
-      {selectedEvent && (
-        <EventModal
-          event={selectedEvent}
-          onClose={() => setSelectedEvent(null)}
-        />
-      )}
+      {selectedEvent && <EventModal event={selectedEvent} onClose={() => setSelectedEvent(null)} />}
 
       {showCreateModal && (
-        <CreateEventModal
-          initialDate={currentDate}
-          onClose={() => setShowCreateModal(false)}
-        />
+        <CreateEventModal initialDate={currentDate} onClose={() => setShowCreateModal(false)} />
       )}
 
-      {showVoiceModal && (
-        <VoiceModal onClose={() => setShowVoiceModal(false)} />
-      )}
+      {showVoiceModal && <VoiceModal onClose={() => setShowVoiceModal(false)} />}
 
-      {showNotifPanel && (
-        <NotificationPanel onClose={() => setShowNotifPanel(false)} />
-      )}
+      {showNotifPanel && <NotificationPanel onClose={() => setShowNotifPanel(false)} />}
     </div>
   )
 }

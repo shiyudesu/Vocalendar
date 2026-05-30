@@ -1,11 +1,4 @@
-import {
-  CalendarDays,
-  ChevronLeft,
-  ChevronRight,
-  Clock,
-  MapPin,
-  Users,
-} from 'lucide-react'
+import { CalendarDays, ChevronLeft, ChevronRight, Clock, MapPin, Users } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
 import {
@@ -99,14 +92,14 @@ function EventCard({
 
   return (
     <button
-      className="w-full rounded-lg border border-slate-200 bg-white p-3 text-left shadow-sm transition hover:shadow-md hover:border-slate-300"
+      className="w-full rounded-lg border border-slate-200 bg-white p-3 text-left shadow-sm transition hover:border-slate-300 hover:shadow-md"
       onClick={() => onClick?.(event)}
       type="button"
     >
       <div className="flex items-start gap-2">
         <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${priorityDot}`} />
         <div className="min-w-0 flex-1">
-          <h4 className="font-semibold text-slate-900 truncate">{event.title}</h4>
+          <h4 className="truncate font-semibold text-slate-900">{event.title}</h4>
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-slate-500">
             <span className="flex items-center gap-1">
               <Clock size={12} />
@@ -157,9 +150,7 @@ export function DayView({
   const events = useMemo(() => getEventsForDate(date), [date])
 
   const eventPositions = useMemo(() => {
-    const sorted = [...events].sort(
-      (a, b) => a.startTime.getTime() - b.startTime.getTime(),
-    )
+    const sorted = [...events].sort((a, b) => a.startTime.getTime() - b.startTime.getTime())
     return sorted.map((event) => {
       const startHour = event.startTime.getHours() + event.startTime.getMinutes() / 60
       const endHour = event.endTime
@@ -174,12 +165,8 @@ export function DayView({
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center gap-3 border-b border-slate-200 px-4 py-3">
-        <h2 className="text-lg font-semibold text-slate-900">
-          {formatDateFull(date)}
-        </h2>
-        <span className="text-sm text-slate-500">
-          {WEEK_DAYS[date.getDay()]}
-        </span>
+        <h2 className="text-lg font-semibold text-slate-900">{formatDateFull(date)}</h2>
+        <span className="text-sm text-slate-500">{WEEK_DAYS[date.getDay()]}</span>
         {isSameDay(date, new Date()) ? (
           <span className="rounded bg-teal-100 px-2 py-0.5 text-xs font-medium text-teal-700">
             今天
@@ -215,13 +202,9 @@ export function DayView({
                 <span
                   className={`h-1.5 w-1.5 shrink-0 rounded-full ${getPriorityColor(event.priority)}`}
                 />
-                <span className="truncate font-medium text-slate-800">
-                  {event.title}
-                </span>
+                <span className="truncate font-medium text-slate-800">{event.title}</span>
               </div>
-              <div className="mt-0.5 truncate text-[10px] text-slate-500">
-                {event.location}
-              </div>
+              <div className="mt-0.5 truncate text-[10px] text-slate-500">{event.location}</div>
             </button>
           ))}
         </div>
@@ -295,15 +278,11 @@ export function WeekView({
 
       {/* Body */}
       <div className="flex-1 overflow-y-auto">
-        <div className="grid grid-cols-[60px_repeat(7,1fr)] min-h-[1536px]">
+        <div className="grid min-h-[1536px] grid-cols-[60px_repeat(7,1fr)]">
           {/* Time labels */}
           <div className="border-r border-slate-100">
             {HOURS.map((hour) => (
-              <div
-                className="flex items-start justify-end pr-2"
-                key={hour}
-                style={{ height: 64 }}
-              >
+              <div className="flex items-start justify-end pr-2" key={hour} style={{ height: 64 }}>
                 <span className="text-[11px] text-slate-400">
                   {String(hour).padStart(2, '0')}:00
                 </span>
@@ -315,8 +294,7 @@ export function WeekView({
           {days.map((day, dayIndex) => {
             const dayEvents = eventsByDay[dayIndex]
             const eventPositions = dayEvents.map((event) => {
-              const startHour =
-                event.startTime.getHours() + event.startTime.getMinutes() / 60
+              const startHour = event.startTime.getHours() + event.startTime.getMinutes() / 60
               const endHour = event.endTime
                 ? event.endTime.getHours() + event.endTime.getMinutes() / 60
                 : startHour + 1
@@ -332,11 +310,7 @@ export function WeekView({
               >
                 {/* Hour lines */}
                 {HOURS.map((hour) => (
-                  <div
-                    className="border-b border-slate-50"
-                    key={hour}
-                    style={{ height: 64 }}
-                  />
+                  <div className="border-b border-slate-50" key={hour} style={{ height: 64 }} />
                 ))}
 
                 {/* Events */}
@@ -402,10 +376,7 @@ export function MonthView({
       {/* Weekday headers */}
       <div className="grid grid-cols-7 border-b border-slate-200">
         {WEEK_DAYS_SHORT.map((day) => (
-          <div
-            className="py-2 text-center text-xs font-medium text-slate-500"
-            key={day}
-          >
+          <div className="py-2 text-center text-xs font-medium text-slate-500" key={day}>
             {day}
           </div>
         ))}
@@ -421,7 +392,7 @@ export function MonthView({
 
           return (
             <div
-              className={`flex flex-col border-b border-r border-slate-100 p-1.5 ${
+              className={`flex flex-col border-r border-b border-slate-100 p-1.5 ${
                 !isCurrentMonth ? 'bg-slate-50/50' : ''
               } ${index % 7 === 6 ? 'border-r-0' : ''}`}
               key={index}
@@ -439,9 +410,7 @@ export function MonthView({
                   {day.getDate()}
                 </span>
                 {dayEvents.length > 0 ? (
-                  <span className="text-[10px] text-slate-400">
-                    {dayEvents.length}个
-                  </span>
+                  <span className="text-[10px] text-slate-400">{dayEvents.length}个</span>
                 ) : null}
               </div>
               <div className="mt-1 flex flex-col gap-0.5 overflow-hidden">
@@ -479,9 +448,7 @@ export function MonthView({
 
 export function ListView({ onEventClick }: { onEventClick: (event: Event) => void }) {
   const sortedEvents = useMemo(() => {
-    return [...mockEvents].sort(
-      (a, b) => a.startTime.getTime() - b.startTime.getTime(),
-    )
+    return [...mockEvents].sort((a, b) => a.startTime.getTime() - b.startTime.getTime())
   }, [])
 
   const groupedEvents = useMemo(() => {
@@ -508,12 +475,8 @@ export function ListView({ onEventClick }: { onEventClick: (event: Event) => voi
           return (
             <div className="px-4 py-4" key={dateKey}>
               <div className="mb-3 flex items-center gap-2">
-                <h3 className="text-sm font-semibold text-slate-700">
-                  {formatDateFull(date)}
-                </h3>
-                <span className="text-xs text-slate-500">
-                  {WEEK_DAYS[date.getDay()]}
-                </span>
+                <h3 className="text-sm font-semibold text-slate-700">{formatDateFull(date)}</h3>
+                <span className="text-xs text-slate-500">{WEEK_DAYS[date.getDay()]}</span>
                 {isToday ? (
                   <span className="rounded bg-teal-100 px-2 py-0.5 text-xs font-medium text-teal-700">
                     今天
@@ -522,11 +485,7 @@ export function ListView({ onEventClick }: { onEventClick: (event: Event) => voi
               </div>
               <div className="flex flex-col gap-2 pl-2">
                 {events.map((event) => (
-                  <EventCard
-                    event={event}
-                    key={event.id}
-                    onClick={onEventClick}
-                  />
+                  <EventCard event={event} key={event.id} onClick={onEventClick} />
                 ))}
               </div>
             </div>
@@ -574,11 +533,7 @@ export function CalendarContainer({
 
 // ─── Navigation Helpers ───
 
-export function navigateDate(
-  date: Date,
-  view: CalendarViewType,
-  direction: 'prev' | 'next',
-): Date {
+export function navigateDate(date: Date, view: CalendarViewType, direction: 'prev' | 'next'): Date {
   const d = new Date(date)
   if (view === 'day') {
     d.setDate(d.getDate() + (direction === 'next' ? 1 : -1))
@@ -627,9 +582,7 @@ export function CalendarViewSwitcher({
       {options.map((opt) => (
         <button
           className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
-            view === opt.value
-              ? 'bg-slate-900 text-white'
-              : 'text-slate-600 hover:bg-slate-50'
+            view === opt.value ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-50'
           }`}
           key={opt.value}
           onClick={() => onChange(opt.value)}
@@ -657,6 +610,7 @@ export function DateNavigator({
     <div className="flex items-center gap-2">
       <div className="flex items-center rounded-lg border border-slate-200 bg-white shadow-sm">
         <button
+          aria-label="上一个"
           className="flex h-8 w-8 items-center justify-center rounded-l-lg text-slate-600 transition hover:bg-slate-50"
           onClick={() => onNavigate('prev')}
           type="button"
@@ -664,6 +618,7 @@ export function DateNavigator({
           <ChevronLeft size={16} />
         </button>
         <button
+          aria-label="下一个"
           className="flex h-8 w-8 items-center justify-center rounded-r-lg border-l border-slate-100 text-slate-600 transition hover:bg-slate-50"
           onClick={() => onNavigate('next')}
           type="button"
@@ -678,7 +633,7 @@ export function DateNavigator({
       >
         今天
       </button>
-      <h2 className="ml-2 text-lg font-semibold text-slate-900">
+      <h2 className="ml-2 hidden truncate text-lg font-semibold text-slate-900 sm:block">
         {getDateRangeLabel(date, view)}
       </h2>
     </div>

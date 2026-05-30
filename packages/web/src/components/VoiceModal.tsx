@@ -6,18 +6,26 @@ import { quickCommands, voiceHistory } from '../data/mock'
 export function VoiceModal({ onClose }: { onClose: () => void }) {
   const [isRecording, setIsRecording] = useState(false)
   const [transcript, setTranscript] = useState('')
-  const [status, setStatus] = useState<'idle' | 'listening' | 'processing' | 'confirm' | 'success'>('idle')
+  const [status, setStatus] = useState<'idle' | 'listening' | 'processing' | 'confirm' | 'success'>(
+    'idle',
+  )
   const [volumeBars, setVolumeBars] = useState<number[]>(Array.from({ length: 20 }, () => 3))
   const [confirmationText, setConfirmationText] = useState('')
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
 
   // Simulate volume animation when recording
   useEffect(() => {
     if (!isRecording) return
 
     const interval = setInterval(() => {
-      setVolumeBars(
-        Array.from({ length: 20 }, () => Math.random() * 28 + 4),
-      )
+      setVolumeBars(Array.from({ length: 20 }, () => Math.random() * 28 + 4))
     }, 80)
 
     return () => clearInterval(interval)
@@ -35,9 +43,7 @@ export function VoiceModal({ onClose }: { onClose: () => void }) {
 
     if (status === 'processing') {
       const timer = setTimeout(() => {
-        setConfirmationText(
-          '已理解：明天下午 3 点在国贸和张总喝咖啡，提前 30 分钟提醒，对吗？',
-        )
+        setConfirmationText('已理解：明天下午 3 点在国贸和张总喝咖啡，提前 30 分钟提醒，对吗？')
         setStatus('confirm')
       }, 2000)
       return () => clearTimeout(timer)
@@ -69,10 +75,17 @@ export function VoiceModal({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-md">
-      <div className="relative w-full max-w-md rounded-3xl bg-white shadow-2xl">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-md"
+      onClick={onClose}
+    >
+      <div
+        className="relative w-full max-w-md rounded-3xl bg-white shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Close button */}
         <button
+          aria-label="关闭"
           className="absolute top-4 right-4 flex h-8 w-8 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
           onClick={onClose}
           type="button"
@@ -115,7 +128,7 @@ export function VoiceModal({ onClose }: { onClose: () => void }) {
           {/* Transcript display */}
           {transcript && (
             <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <p className="text-sm text-slate-700 leading-relaxed">{transcript}</p>
+              <p className="text-sm leading-relaxed text-slate-700">{transcript}</p>
             </div>
           )}
 
@@ -124,9 +137,7 @@ export function VoiceModal({ onClose }: { onClose: () => void }) {
             <div className="mt-4 rounded-xl border border-teal-200 bg-teal-50 p-4">
               <div className="flex items-start gap-2">
                 <Volume2 size={16} className="mt-0.5 shrink-0 text-teal-600" />
-                <p className="text-sm text-teal-800 leading-relaxed">
-                  {confirmationText}
-                </p>
+                <p className="text-sm leading-relaxed text-teal-800">{confirmationText}</p>
               </div>
               <div className="mt-3 flex gap-2">
                 <button
@@ -165,10 +176,10 @@ export function VoiceModal({ onClose }: { onClose: () => void }) {
             <button
               className={`flex h-20 w-20 items-center justify-center rounded-full shadow-lg transition-all ${
                 isRecording
-                  ? 'bg-rose-500 text-white shadow-rose-200 animate-pulse'
+                  ? 'animate-pulse bg-rose-500 text-white shadow-rose-200'
                   : status === 'success'
                     ? 'bg-teal-500 text-white shadow-teal-200'
-                    : 'bg-slate-900 text-white shadow-slate-300 hover:bg-teal-700 hover:scale-105'
+                    : 'bg-slate-900 text-white shadow-slate-300 hover:scale-105 hover:bg-teal-700'
               }`}
               onMouseDown={() => {
                 if (status === 'idle' || status === 'success') startRecording()
@@ -201,7 +212,7 @@ export function VoiceModal({ onClose }: { onClose: () => void }) {
 
         {/* Quick commands */}
         <div className="border-t border-slate-100 px-8 py-4">
-          <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">
+          <h4 className="mb-3 text-xs font-semibold tracking-wider text-slate-400 uppercase">
             快捷指令
           </h4>
           <div className="flex flex-wrap gap-2">
@@ -227,15 +238,12 @@ export function VoiceModal({ onClose }: { onClose: () => void }) {
 
         {/* Voice history */}
         <div className="border-t border-slate-100 px-8 py-4">
-          <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">
+          <h4 className="mb-3 text-xs font-semibold tracking-wider text-slate-400 uppercase">
             最近语音记录
           </h4>
           <div className="flex max-h-32 flex-col gap-2 overflow-y-auto">
             {voiceHistory.map((item) => (
-              <div
-                className="rounded-lg border border-slate-100 bg-slate-50 p-2.5"
-                key={item.id}
-              >
+              <div className="rounded-lg border border-slate-100 bg-slate-50 p-2.5" key={item.id}>
                 <p className="text-xs text-slate-700">「{item.text}」</p>
                 <p className="mt-0.5 text-[11px] text-teal-600">{item.result}</p>
               </div>
