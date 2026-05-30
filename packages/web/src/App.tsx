@@ -29,6 +29,7 @@ import {
   navigateDate,
 } from './components/CalendarViews'
 import { CreateEventModal, EventModal } from './components/EventModal'
+import { TagFilterBar } from './components/TagFilterBar'
 import { VoiceModal } from './components/VoiceModal'
 import { getEventsForDate, mockEvents, mockNotifications, mockUser } from './data/mock'
 import type { Event, Reminder } from './data/mock'
@@ -605,6 +606,20 @@ const SIDEBAR_DEFAULT_WIDTH = 240
 const SIDEBAR_MIN_WIDTH = 200
 const SIDEBAR_MAX_WIDTH = 480
 const SIDEBAR_WIDTH_STORAGE_KEY = 'vocalendar:sidebarWidth'
+const HIDDEN_TAGS_STORAGE_KEY = 'vocalendar:hiddenTags'
+
+function loadHiddenTags(): Set<string> {
+  if (typeof window === 'undefined') return new Set()
+  try {
+    const raw = window.localStorage.getItem(HIDDEN_TAGS_STORAGE_KEY)
+    if (!raw) return new Set()
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return new Set()
+    return new Set(parsed.filter((x): x is string => typeof x === 'string'))
+  } catch {
+    return new Set()
+  }
+}
 
 function App() {
   const [page, setPage] = useState<Page>('calendar')
@@ -625,12 +640,41 @@ function App() {
     return Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, parsed))
   })
   const [isResizingSidebar, setIsResizingSidebar] = useState(false)
+  const [hiddenTags, setHiddenTags] = useState<Set<string>>(() => loadHiddenTags())
 
   const selectedEvent = selectedEventId
     ? (events.find((e) => e.id === selectedEventId) ?? null)
     : null
 
   const tagSuggestions = useMemo(() => getAllTagNames(events), [events])
+
+  // Sanitize hiddenTags against the live tag set: drop entries that no longer
+  // correspond to any event (after rename / delete / mock reload).
+  const sanitizedHiddenTags = useMemo(() => {
+    const live = new Set(tagSuggestions)
+    const next = new Set<string>()
+    for (const t of hiddenTags) if (live.has(t)) next.add(t)
+    return next
+  }, [hiddenTags, tagSuggestions])
+
+  const visibleEvents = useMemo(() => {
+    if (sanitizedHiddenTags.size === 0) return events
+    return events.filter((e) => {
+      if (!e.tags || e.tags.length === 0) return true
+      return e.tags.some((t) => !sanitizedHiddenTags.has(t))
+    })
+  }, [events, sanitizedHiddenTags])
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        HIDDEN_TAGS_STORAGE_KEY,
+        JSON.stringify(Array.from(sanitizedHiddenTags)),
+      )
+    } catch {
+      // ignore
+    }
+  }, [sanitizedHiddenTags])
 
   useEffect(() => {
     try {
@@ -702,6 +746,25 @@ function App() {
   function deleteEvent(id: string) {
     setEvents((arr) => arr.filter((e) => e.id !== id))
     setSelectedEventId((cur) => (cur === id ? null : cur))
+  }
+
+  function toggleTagVisibility(tag: string) {
+    setHiddenTags((prev) => {
+      const next = new Set(prev)
+      if (next.has(tag)) next.delete(tag)
+      else next.add(tag)
+      return next
+    })
+  }
+
+  function clearTagFilter() {
+    setHiddenTags(new Set())
+  }
+
+  function focusOnTag(tag: string) {
+    // "Focus this tag" — hide every other tag. Untagged events stay visible
+    // per product decision.
+    setHiddenTags(new Set(tagSuggestions.filter((t) => t !== tag)))
   }
 
   function toggleNotifPanel() {
@@ -811,13 +874,13 @@ function App() {
           <div className="space-y-3 px-3 pb-3">
             <MiniCalendar
               currentDate={currentDate}
-              events={events}
+              events={visibleEvents}
               onSelectDate={(d) => {
                 setCurrentDate(d)
                 setCalendarView('day')
               }}
             />
-            <UpcomingEvents events={events} onEventClick={handleEventClick} />
+            <UpcomingEvents events={visibleEvents} onEventClick={handleEventClick} />
           </div>
         )}
 
@@ -926,6 +989,15 @@ function App() {
           </header>
         )}
 
+        {page === 'calendar' && (
+          <TagFilterBar
+            allTags={tagSuggestions}
+            hiddenTags={sanitizedHiddenTags}
+            onClear={clearTagFilter}
+            onToggle={toggleTagVisibility}
+          />
+        )}
+
         {/* Content area */}
         <div className="flex-1 overflow-hidden">
           {page === 'calendar' && (
@@ -933,7 +1005,7 @@ function App() {
               <div className="h-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
                 <CalendarContainer
                   currentDate={currentDate}
-                  events={events}
+                  events={visibleEvents}
                   onEventClick={handleEventClick}
                   view={calendarView}
                 />
@@ -961,6 +1033,7 @@ function App() {
           event={selectedEvent}
           onClose={() => setSelectedEventId(null)}
           onDelete={() => deleteEvent(selectedEvent.id)}
+          onTagClick={focusOnTag}
           onUpdate={(patch) => updateEvent(selectedEvent.id, patch)}
           tagSuggestions={tagSuggestions}
         />
