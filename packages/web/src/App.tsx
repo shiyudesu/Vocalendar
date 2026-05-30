@@ -885,11 +885,11 @@ function App() {
       <aside
         className={`${
           isMobileNavOpen ? 'fixed inset-y-0 left-0 z-40 flex' : 'hidden md:flex'
-        } shrink-0 flex-col border-r border-slate-200 bg-white md:relative`}
+        } shrink-0 flex-col overflow-hidden border-r border-slate-200 bg-white md:relative`}
         style={{ width: isMobileNavOpen ? SIDEBAR_DEFAULT_WIDTH : sidebarWidth }}
       >
         {/* Logo */}
-        <div className="flex items-center gap-2 px-4 py-4">
+        <div className="flex shrink-0 items-center gap-2 px-4 py-4">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-900 text-white">
             <CalendarDays size={18} />
           </div>
@@ -897,7 +897,7 @@ function App() {
         </div>
 
         {/* Create button */}
-        <div className="px-3 pb-3">
+        <div className="shrink-0 px-3 pb-3">
           <button
             className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-teal-700"
             onClick={() => setShowCreateModal(true)}
@@ -909,7 +909,7 @@ function App() {
         </div>
 
         {/* Nav */}
-        <nav className="space-y-1.5 px-3">
+        <nav className="shrink-0 space-y-1.5 px-3">
           {[
             { id: 'calendar' as Page, label: '日历', icon: CalendarDays },
             { id: 'voice' as Page, label: '语音助手', icon: Mic },
@@ -929,9 +929,10 @@ function App() {
           ))}
         </nav>
 
-        {/* Mini Calendar - only show on calendar page */}
+        {/* Mini Calendar - only show on calendar page. Scrolls internally if
+            the viewport is too short to fit MiniCal + Upcoming in full. */}
         {page === 'calendar' && (
-          <div className="space-y-3 px-3 pt-4 pb-3">
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 pt-4 pb-3">
             <MiniCalendar
               currentDate={currentDate}
               events={visibleEvents}
@@ -945,7 +946,7 @@ function App() {
         )}
 
         {/* User */}
-        <div className="mt-auto border-t border-slate-100 p-3">
+        <div className="mt-auto shrink-0 border-t border-slate-100 p-3">
           <div className="flex items-center gap-2 rounded-lg px-2 py-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-teal-100 text-xs font-bold text-teal-700">
               {mockUser.name[0]}
