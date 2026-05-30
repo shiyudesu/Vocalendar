@@ -6,6 +6,7 @@ import {
   Clock,
   Home,
   MapPin,
+  Menu,
   Mic,
   Moon,
   Plus,
@@ -17,7 +18,8 @@ import {
   Volume2,
   X,
 } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import type { MouseEvent as ReactMouseEvent } from 'react'
 
 import type { CalendarViewType } from './components/CalendarViews'
 import {
@@ -27,14 +29,12 @@ import {
   navigateDate,
 } from './components/CalendarViews'
 import { CreateEventModal, EventModal } from './components/EventModal'
+import { TagFilterBar } from './components/TagFilterBar'
+import { TagManager } from './components/TagManager'
 import { VoiceModal } from './components/VoiceModal'
-import {
-  getEventsForDate,
-  mockEvents,
-  mockNotifications,
-  mockUser,
-} from './data/mock'
-import type { Event } from './data/mock'
+import { getEventsForDate, mockEvents, mockNotifications, mockUser } from './data/mock'
+import type { Event, Reminder } from './data/mock'
+import { getAllTagNames } from './lib/tags'
 
 type Page = 'calendar' | 'voice' | 'settings'
 
@@ -53,14 +53,27 @@ function formatTime(date: Date): string {
 
 // ─── Notification Panel ───
 
-function NotificationPanel({ onClose }: { onClose: () => void }) {
-  const [notifs] = useState(mockNotifications)
+function NotificationPanel({
+  notifications,
+  onClose,
+}: {
+  notifications: typeof mockNotifications
+  onClose: () => void
+}) {
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
 
   return (
     <div className="absolute top-14 right-4 z-40 w-80 rounded-xl border border-slate-200 bg-white shadow-xl">
       <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
         <h3 className="font-semibold text-slate-900">通知</h3>
         <button
+          aria-label="关闭"
           className="text-slate-400 transition hover:text-slate-600"
           onClick={onClose}
           type="button"
@@ -69,28 +82,16 @@ function NotificationPanel({ onClose }: { onClose: () => void }) {
         </button>
       </div>
       <div className="max-h-80 overflow-y-auto">
-        {notifs.length === 0 ? (
-          <div className="px-4 py-8 text-center text-sm text-slate-400">
-            暂无通知
-          </div>
+        {notifications.length === 0 ? (
+          <div className="px-4 py-8 text-center text-sm text-slate-400">暂无通知</div>
         ) : (
-          notifs.map((n) => (
-            <div
-              className={`border-b border-slate-50 px-4 py-3 last:border-b-0 ${n.read ? '' : 'bg-teal-50/50'}`}
-              key={n.id}
-            >
+          notifications.map((n) => (
+            <div className="border-b border-slate-50 px-4 py-3 last:border-b-0" key={n.id}>
               <div className="flex items-start gap-2">
-                {!n.read && (
-                  <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-teal-500" />
-                )}
                 <div className="flex-1">
-                  <p className="text-sm font-medium text-slate-800">
-                    {n.title}
-                  </p>
+                  <p className="text-sm font-medium text-slate-800">{n.title}</p>
                   <p className="mt-0.5 text-xs text-slate-500">{n.message}</p>
-                  <p className="mt-1 text-[11px] text-slate-400">
-                    {formatTime(n.time)}
-                  </p>
+                  <p className="mt-1 text-[11px] text-slate-400">{formatTime(n.time)}</p>
                 </div>
               </div>
             </div>
@@ -105,9 +106,11 @@ function NotificationPanel({ onClose }: { onClose: () => void }) {
 
 function MiniCalendar({
   currentDate,
+  events,
   onSelectDate,
 }: {
   currentDate: Date
+  events: Event[]
   onSelectDate: (date: Date) => void
 }) {
   const [displayMonth, setDisplayMonth] = useState(() => {
@@ -147,6 +150,7 @@ function MiniCalendar({
     <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
       <div className="mb-2 flex items-center justify-between">
         <button
+          aria-label="上一月"
           className="flex h-6 w-6 items-center justify-center rounded text-slate-500 transition hover:bg-slate-100"
           onClick={() => setDisplayMonth(new Date(year, month - 1, 1))}
           type="button"
@@ -157,6 +161,7 @@ function MiniCalendar({
           {year}年{month + 1}月
         </span>
         <button
+          aria-label="下一月"
           className="flex h-6 w-6 items-center justify-center rounded text-slate-500 transition hover:bg-slate-100"
           onClick={() => setDisplayMonth(new Date(year, month + 1, 1))}
           type="button"
@@ -166,10 +171,7 @@ function MiniCalendar({
       </div>
       <div className="grid grid-cols-7 gap-0.5">
         {weekDays.map((d) => (
-          <div
-            className="py-1 text-center text-[10px] font-medium text-slate-400"
-            key={d}
-          >
+          <div className="py-1 text-center text-[10px] font-medium text-slate-400" key={d}>
             {d}
           </div>
         ))}
@@ -182,7 +184,7 @@ function MiniCalendar({
             date.getDate() === currentDate.getDate() &&
             date.getMonth() === currentDate.getMonth() &&
             date.getFullYear() === currentDate.getFullYear()
-          const hasEvents = getEventsForDate(date).length > 0
+          const hasEvents = getEventsForDate(events, date).length > 0
 
           return (
             <button
@@ -215,15 +217,21 @@ function MiniCalendar({
 
 // ─── Upcoming Events Sidebar ───
 
-function UpcomingEvents({ onEventClick }: { onEventClick: (e: Event) => void }) {
-  const upcoming = mockEvents
+function UpcomingEvents({
+  events,
+  onEventClick,
+}: {
+  events: Event[]
+  onEventClick: (e: Event) => void
+}) {
+  const upcoming = events
     .filter((e) => e.startTime >= new Date())
     .sort((a, b) => a.startTime.getTime() - b.startTime.getTime())
     .slice(0, 5)
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-      <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
+      <h4 className="mb-2 text-xs font-semibold tracking-wider text-slate-400 uppercase">
         即将到来
       </h4>
       <div className="flex flex-col gap-2">
@@ -238,9 +246,7 @@ function UpcomingEvents({ onEventClick }: { onEventClick: (e: Event) => void }) 
               <span>{event.startTime.getDate()}</span>
             </div>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-xs font-medium text-slate-800">
-                {event.title}
-              </p>
+              <p className="truncate text-xs font-medium text-slate-800">{event.title}</p>
               <p className="text-[10px] text-slate-500">
                 {formatTime(event.startTime)}
                 {event.location ? ` · ${event.location}` : ''}
@@ -258,9 +264,19 @@ function UpcomingEvents({ onEventClick }: { onEventClick: (e: Event) => void }) 
 
 // ─── Settings Page ───
 
-function SettingsPage() {
+function SettingsPage({
+  events,
+  hiddenTags,
+  onRenameTag,
+  onDeleteTag,
+}: {
+  events: Event[]
+  hiddenTags: Set<string>
+  onRenameTag: (from: string, to: string) => void
+  onDeleteTag: (tag: string) => void
+}) {
   const [settings, setSettings] = useState(mockUser.settings)
-  const [activeTab, setActiveTab] = useState<'general' | 'voice' | 'account'>('general')
+  const [activeTab, setActiveTab] = useState<'general' | 'voice' | 'tags' | 'account'>('general')
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -275,6 +291,7 @@ function SettingsPage() {
           {[
             { id: 'general' as const, label: '通用', icon: Settings },
             { id: 'voice' as const, label: '语音', icon: Volume2 },
+            { id: 'tags' as const, label: '标签', icon: Tag },
             { id: 'account' as const, label: '账户', icon: Users },
           ].map((tab) => (
             <button
@@ -321,9 +338,7 @@ function SettingsPage() {
                             : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
                         }`}
                         key={opt.value}
-                        onClick={() =>
-                          setSettings((s) => ({ ...s, theme: opt.value }))
-                        }
+                        onClick={() => setSettings((s) => ({ ...s, theme: opt.value }))}
                         type="button"
                       >
                         <opt.icon size={14} />
@@ -412,9 +427,7 @@ function SettingsPage() {
                         settings.voiceFeedback ? 'translate-x-5.5' : 'translate-x-0.5'
                       }`}
                       style={{
-                        transform: settings.voiceFeedback
-                          ? 'translateX(22px)'
-                          : 'translateX(2px)',
+                        transform: settings.voiceFeedback ? 'translateX(22px)' : 'translateX(2px)',
                       }}
                     />
                   </button>
@@ -466,6 +479,15 @@ function SettingsPage() {
             </div>
           )}
 
+          {activeTab === 'tags' && (
+            <TagManager
+              events={events}
+              hiddenTags={hiddenTags}
+              onDelete={onDeleteTag}
+              onRename={onRenameTag}
+            />
+          )}
+
           {activeTab === 'account' && (
             <div className="space-y-6">
               <div>
@@ -478,21 +500,15 @@ function SettingsPage() {
                   {mockUser.name[0]}
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-slate-900">
-                    {mockUser.name}
-                  </p>
+                  <p className="text-sm font-semibold text-slate-900">{mockUser.name}</p>
                   <p className="text-sm text-slate-500">{mockUser.email}</p>
-                  <p className="mt-1 text-xs text-slate-400">
-                    时区：{mockUser.timezone}
-                  </p>
+                  <p className="mt-1 text-xs text-slate-400">时区：{mockUser.timezone}</p>
                 </div>
               </div>
 
               <div className="space-y-3">
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-slate-700">
-                    显示名称
-                  </label>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">显示名称</label>
                   <input
                     className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
                     defaultValue={mockUser.name}
@@ -500,9 +516,7 @@ function SettingsPage() {
                   />
                 </div>
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-slate-700">
-                    邮箱
-                  </label>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">邮箱</label>
                   <input
                     className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
                     defaultValue={mockUser.email}
@@ -556,9 +570,7 @@ function VoicePage() {
           <Mic size={36} className="text-teal-600" />
         </div>
         <h2 className="text-2xl font-bold text-slate-900">语音助手</h2>
-        <p className="mt-2 text-slate-500">
-          用自然语言快速创建、查询和修改日程
-        </p>
+        <p className="mt-2 text-slate-500">用自然语言快速创建、查询和修改日程</p>
       </div>
 
       <button
@@ -593,13 +605,7 @@ function VoicePage() {
       <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <h3 className="mb-4 text-sm font-semibold text-slate-800">快捷指令</h3>
         <div className="flex flex-wrap gap-2">
-          {[
-            '我到家了',
-            '会议延期 15 分钟',
-            '会议取消',
-            '今天有什么安排',
-            '下周日程',
-          ].map((cmd) => (
+          {['我到家了', '会议延期 15 分钟', '会议取消', '今天有什么安排', '下周日程'].map((cmd) => (
             <span
               className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-600"
               key={cmd}
@@ -610,23 +616,96 @@ function VoicePage() {
         </div>
       </div>
 
-      {showVoiceModal && (
-        <VoiceModal onClose={() => setShowVoiceModal(false)} />
-      )}
+      {showVoiceModal && <VoiceModal onClose={() => setShowVoiceModal(false)} />}
     </div>
   )
 }
 
 // ─── Main App ───
 
+const SIDEBAR_DEFAULT_WIDTH = 240
+const SIDEBAR_MIN_WIDTH = 200
+const SIDEBAR_MAX_WIDTH = 480
+const SIDEBAR_WIDTH_STORAGE_KEY = 'vocalendar:sidebarWidth'
+const HIDDEN_TAGS_STORAGE_KEY = 'vocalendar:hiddenTags'
+
+function loadHiddenTags(): Set<string> {
+  if (typeof window === 'undefined') return new Set()
+  try {
+    const raw = window.localStorage.getItem(HIDDEN_TAGS_STORAGE_KEY)
+    if (!raw) return new Set()
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return new Set()
+    return new Set(parsed.filter((x): x is string => typeof x === 'string'))
+  } catch {
+    return new Set()
+  }
+}
+
 function App() {
   const [page, setPage] = useState<Page>('calendar')
   const [calendarView, setCalendarView] = useState<CalendarViewType>('week')
   const [currentDate, setCurrentDate] = useState(() => getTodayStart())
-  const [selectedEvent, setSelectedEvent] = useState<Event | null>(null)
+  const [events, setEvents] = useState<Event[]>(mockEvents)
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showVoiceModal, setShowVoiceModal] = useState(false)
   const [showNotifPanel, setShowNotifPanel] = useState(false)
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false)
+  const [notifications, setNotifications] = useState(mockNotifications)
+  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
+    if (typeof window === 'undefined') return SIDEBAR_DEFAULT_WIDTH
+    const stored = window.localStorage.getItem(SIDEBAR_WIDTH_STORAGE_KEY)
+    const parsed = stored ? Number.parseInt(stored, 10) : SIDEBAR_DEFAULT_WIDTH
+    if (Number.isNaN(parsed)) return SIDEBAR_DEFAULT_WIDTH
+    return Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, parsed))
+  })
+  const [isResizingSidebar, setIsResizingSidebar] = useState(false)
+  const [hiddenTags, setHiddenTags] = useState<Set<string>>(() => loadHiddenTags())
+
+  const selectedEvent = selectedEventId
+    ? (events.find((e) => e.id === selectedEventId) ?? null)
+    : null
+
+  const tagSuggestions = useMemo(() => getAllTagNames(events), [events])
+
+  // Sanitize hiddenTags against the live tag set: drop entries that no longer
+  // correspond to any event (after rename / delete / mock reload).
+  const sanitizedHiddenTags = useMemo(() => {
+    const live = new Set(tagSuggestions)
+    const next = new Set<string>()
+    for (const t of hiddenTags) if (live.has(t)) next.add(t)
+    return next
+  }, [hiddenTags, tagSuggestions])
+
+  const visibleEvents = useMemo(() => {
+    if (sanitizedHiddenTags.size === 0) return events
+    return events.filter((e) => {
+      if (!e.tags || e.tags.length === 0) return true
+      return e.tags.some((t) => !sanitizedHiddenTags.has(t))
+    })
+  }, [events, sanitizedHiddenTags])
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        HIDDEN_TAGS_STORAGE_KEY,
+        JSON.stringify(Array.from(sanitizedHiddenTags)),
+      )
+    } catch {
+      // ignore
+    }
+  }, [sanitizedHiddenTags])
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, String(sidebarWidth))
+    } catch {
+      // ignore quota / privacy errors
+    }
+  }, [sidebarWidth])
+
+  const hasUnreadNotif = notifications.some((n) => !n.read)
 
   function handleNavigate(direction: 'prev' | 'next') {
     setCurrentDate((d) => navigateDate(d, calendarView, direction))
@@ -637,15 +716,180 @@ function App() {
   }
 
   function handleEventClick(event: Event) {
-    setSelectedEvent(event)
+    setSelectedEventId(event.id)
+  }
+
+  function navigateToPage(p: Page) {
+    setPage(p)
+    setIsMobileNavOpen(false)
+  }
+
+  function createEvent(input: {
+    title: string
+    description?: string
+    startTime: Date
+    endTime?: Date
+    location?: string
+    priority: 'low' | 'normal' | 'high'
+    allDay?: boolean
+    tags?: string[]
+  }) {
+    const now = new Date()
+    const id = `event-${now.getTime().toString(36)}-${Math.random().toString(36).slice(2, 6)}`
+    const reminders: Reminder[] = [
+      { id: `${id}-r1`, eventId: id, minutesBefore: 15, method: 'push' },
+    ]
+    const newEvent: Event = {
+      id,
+      title: input.title,
+      description: input.description,
+      startTime: input.startTime,
+      endTime: input.endTime,
+      allDay: input.allDay,
+      timezone: 'Asia/Shanghai',
+      location: input.location,
+      reminders,
+      priority: input.priority,
+      tags: input.tags,
+      source: 'manual',
+      createdAt: now,
+      updatedAt: now,
+    }
+    setEvents((arr) => [...arr, newEvent])
+  }
+
+  function updateEvent(id: string, patch: Partial<Event>) {
+    setEvents((arr) =>
+      arr.map((e) => (e.id === id ? { ...e, ...patch, updatedAt: new Date() } : e)),
+    )
+  }
+
+  function deleteEvent(id: string) {
+    setEvents((arr) => arr.filter((e) => e.id !== id))
+    setSelectedEventId((cur) => (cur === id ? null : cur))
+  }
+
+  function toggleTagVisibility(tag: string) {
+    setHiddenTags((prev) => {
+      const next = new Set(prev)
+      if (next.has(tag)) next.delete(tag)
+      else next.add(tag)
+      return next
+    })
+  }
+
+  function clearTagFilter() {
+    setHiddenTags(new Set())
+  }
+
+  function focusOnTag(tag: string) {
+    // "Focus this tag" — hide every other tag. Untagged events stay visible
+    // per product decision.
+    setHiddenTags(new Set(tagSuggestions.filter((t) => t !== tag)))
+  }
+
+  function renameTag(from: string, to: string) {
+    const target = to.trim()
+    if (!target || target === from) return
+    setEvents((arr) =>
+      arr.map((e) => {
+        if (!e.tags) return e
+        if (!e.tags.includes(from)) return e
+        const next = Array.from(new Set(e.tags.map((t) => (t === from ? target : t))))
+        return { ...e, tags: next, updatedAt: new Date() }
+      }),
+    )
+    setHiddenTags((prev) => {
+      const next = new Set(prev)
+      const wasHidden = next.delete(from)
+      if (wasHidden) next.add(target)
+      return next
+    })
+  }
+
+  function deleteTag(tag: string) {
+    setEvents((arr) =>
+      arr.map((e) => {
+        if (!e.tags || !e.tags.includes(tag)) return e
+        const filtered = e.tags.filter((t) => t !== tag)
+        return {
+          ...e,
+          tags: filtered.length > 0 ? filtered : undefined,
+          updatedAt: new Date(),
+        }
+      }),
+    )
+    setHiddenTags((prev) => {
+      if (!prev.has(tag)) return prev
+      const next = new Set(prev)
+      next.delete(tag)
+      return next
+    })
+  }
+
+  function toggleNotifPanel() {
+    setShowNotifPanel((prev) => {
+      const next = !prev
+      if (next && hasUnreadNotif) {
+        setNotifications((arr) => arr.map((n) => ({ ...n, read: true })))
+      }
+      return next
+    })
+  }
+
+  function startSidebarResize(e: ReactMouseEvent<HTMLDivElement>) {
+    e.preventDefault()
+    const startX = e.clientX
+    const startWidth = sidebarWidth
+    setIsResizingSidebar(true)
+
+    function onMove(ev: MouseEvent) {
+      const next = Math.min(
+        SIDEBAR_MAX_WIDTH,
+        Math.max(SIDEBAR_MIN_WIDTH, startWidth + ev.clientX - startX),
+      )
+      setSidebarWidth(next)
+    }
+
+    function onUp() {
+      setIsResizingSidebar(false)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }
+
+  function resetSidebarWidth() {
+    setSidebarWidth(SIDEBAR_DEFAULT_WIDTH)
   }
 
   return (
     <div className="flex h-screen bg-[#f6f7f9]">
+      {/* Mobile sidebar backdrop */}
+      {isMobileNavOpen && (
+        <button
+          aria-label="关闭菜单"
+          className="fixed inset-0 z-30 bg-black/40 md:hidden"
+          onClick={() => setIsMobileNavOpen(false)}
+          type="button"
+        />
+      )}
+
       {/* Sidebar */}
-      <aside className="flex w-60 shrink-0 flex-col border-r border-slate-200 bg-white">
+      <aside
+        className={`${
+          isMobileNavOpen ? 'fixed inset-y-0 left-0 z-40 flex' : 'hidden md:flex'
+        } shrink-0 flex-col overflow-hidden border-r border-slate-200 bg-white md:relative`}
+        style={{ width: isMobileNavOpen ? SIDEBAR_DEFAULT_WIDTH : sidebarWidth }}
+      >
         {/* Logo */}
-        <div className="flex items-center gap-2 px-4 py-4">
+        <div className="flex shrink-0 items-center gap-2 px-4 py-4">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-900 text-white">
             <CalendarDays size={18} />
           </div>
@@ -653,7 +897,7 @@ function App() {
         </div>
 
         {/* Create button */}
-        <div className="px-3 pb-3">
+        <div className="shrink-0 px-3 pb-3">
           <button
             className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-teal-700"
             onClick={() => setShowCreateModal(true)}
@@ -665,7 +909,7 @@ function App() {
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 space-y-0.5 px-3">
+        <nav className="shrink-0 space-y-1.5 px-3">
           {[
             { id: 'calendar' as Page, label: '日历', icon: CalendarDays },
             { id: 'voice' as Page, label: '语音助手', icon: Mic },
@@ -673,12 +917,10 @@ function App() {
           ].map((item) => (
             <button
               className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm font-medium transition ${
-                page === item.id
-                  ? 'bg-slate-900 text-white'
-                  : 'text-slate-600 hover:bg-slate-100'
+                page === item.id ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'
               }`}
               key={item.id}
-              onClick={() => setPage(item.id)}
+              onClick={() => navigateToPage(item.id)}
               type="button"
             >
               <item.icon size={18} />
@@ -687,65 +929,88 @@ function App() {
           ))}
         </nav>
 
-        {/* Mini Calendar - only show on calendar page */}
+        {/* Mini Calendar - only show on calendar page. Scrolls internally if
+            the viewport is too short to fit MiniCal + Upcoming in full. */}
         {page === 'calendar' && (
-          <div className="px-3 pb-3 space-y-3">
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 pt-4 pb-3">
             <MiniCalendar
               currentDate={currentDate}
+              events={visibleEvents}
               onSelectDate={(d) => {
                 setCurrentDate(d)
                 setCalendarView('day')
               }}
             />
-            <UpcomingEvents onEventClick={handleEventClick} />
+            <UpcomingEvents events={visibleEvents} onEventClick={handleEventClick} />
           </div>
         )}
 
         {/* User */}
-        <div className="border-t border-slate-100 p-3">
+        <div className="mt-auto shrink-0 border-t border-slate-100 p-3">
           <div className="flex items-center gap-2 rounded-lg px-2 py-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-teal-100 text-xs font-bold text-teal-700">
               {mockUser.name[0]}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-xs font-semibold text-slate-800">
-                {mockUser.name}
-              </p>
-              <p className="truncate text-[10px] text-slate-500">
-                {mockUser.email}
-              </p>
+              <p className="truncate text-xs font-semibold text-slate-800">{mockUser.name}</p>
+              <p className="truncate text-[10px] text-slate-500">{mockUser.email}</p>
             </div>
           </div>
         </div>
+
+        {/* Resize handle (desktop only) */}
+        <div
+          aria-label="拖动以调整侧边栏宽度，双击恢复默认"
+          aria-orientation="vertical"
+          aria-valuemax={SIDEBAR_MAX_WIDTH}
+          aria-valuemin={SIDEBAR_MIN_WIDTH}
+          aria-valuenow={sidebarWidth}
+          className={`absolute top-0 right-0 hidden h-full w-1.5 cursor-col-resize transition-colors md:block ${
+            isResizingSidebar ? 'bg-teal-400' : 'bg-transparent hover:bg-teal-200'
+          }`}
+          onDoubleClick={resetSidebarWidth}
+          onMouseDown={startSidebarResize}
+          role="separator"
+          tabIndex={-1}
+        />
       </aside>
 
       {/* Main Content */}
-      <main className="flex flex-1 flex-col min-w-0">
+      <main className="flex min-w-0 flex-1 flex-col">
         {/* Top bar */}
         {page === 'calendar' && (
-          <header className="flex items-center justify-between border-b border-slate-200 bg-white px-6 py-3">
-            <DateNavigator
-              date={currentDate}
-              onNavigate={handleNavigate}
-              onToday={handleToday}
-              view={calendarView}
-            />
-            <div className="flex items-center gap-2">
-              <CalendarViewSwitcher
-                onChange={setCalendarView}
+          <header className="flex items-center justify-between gap-2 border-b border-slate-200 bg-white px-4 py-3 md:px-6">
+            <div className="flex min-w-0 items-center gap-2">
+              <button
+                aria-label="打开菜单"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 md:hidden"
+                onClick={() => setIsMobileNavOpen(true)}
+                type="button"
+              >
+                <Menu size={18} />
+              </button>
+              <DateNavigator
+                date={currentDate}
+                onNavigate={handleNavigate}
+                onToday={handleToday}
                 view={calendarView}
               />
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <CalendarViewSwitcher onChange={setCalendarView} view={calendarView} />
               <button
-                className="ml-2 flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50"
-                onClick={() => setShowNotifPanel((v) => !v)}
+                aria-label={hasUnreadNotif ? '通知（有未读）' : '通知'}
+                className="relative ml-2 flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50"
+                onClick={toggleNotifPanel}
                 type="button"
               >
                 <Bell size={18} />
-                {mockNotifications.some((n) => !n.read) && (
-                  <span className="absolute top-2.5 right-6.5 h-2 w-2 rounded-full bg-rose-500" />
+                {hasUnreadNotif && (
+                  <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-rose-500" />
                 )}
               </button>
               <button
+                aria-label="语音助手"
                 className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50"
                 onClick={() => setShowVoiceModal(true)}
                 type="button"
@@ -757,13 +1022,24 @@ function App() {
         )}
 
         {page !== 'calendar' && (
-          <header className="flex items-center justify-between border-b border-slate-200 bg-white px-6 py-3">
-            <h1 className="text-xl font-bold text-slate-900">
-              {page === 'voice' && '语音助手'}
-              {page === 'settings' && '设置'}
-            </h1>
+          <header className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3 md:px-6">
             <div className="flex items-center gap-2">
               <button
+                aria-label="打开菜单"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 md:hidden"
+                onClick={() => setIsMobileNavOpen(true)}
+                type="button"
+              >
+                <Menu size={18} />
+              </button>
+              <h1 className="text-xl font-bold text-slate-900">
+                {page === 'voice' && '语音助手'}
+                {page === 'settings' && '设置'}
+              </h1>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                aria-label="语音助手"
                 className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50"
                 onClick={() => setShowVoiceModal(true)}
                 type="button"
@@ -774,6 +1050,16 @@ function App() {
           </header>
         )}
 
+        {page === 'calendar' && (
+          <TagFilterBar
+            allTags={tagSuggestions}
+            hiddenTags={sanitizedHiddenTags}
+            onClear={clearTagFilter}
+            onFocus={focusOnTag}
+            onToggle={toggleTagVisibility}
+          />
+        )}
+
         {/* Content area */}
         <div className="flex-1 overflow-hidden">
           {page === 'calendar' && (
@@ -781,6 +1067,7 @@ function App() {
               <div className="h-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
                 <CalendarContainer
                   currentDate={currentDate}
+                  events={visibleEvents}
                   onEventClick={handleEventClick}
                   view={calendarView}
                 />
@@ -796,7 +1083,12 @@ function App() {
 
           {page === 'settings' && (
             <div className="h-full overflow-y-auto p-6">
-              <SettingsPage />
+              <SettingsPage
+                events={events}
+                hiddenTags={sanitizedHiddenTags}
+                onDeleteTag={deleteTag}
+                onRenameTag={renameTag}
+              />
             </div>
           )}
         </div>
@@ -806,7 +1098,11 @@ function App() {
       {selectedEvent && (
         <EventModal
           event={selectedEvent}
-          onClose={() => setSelectedEvent(null)}
+          onClose={() => setSelectedEventId(null)}
+          onDelete={() => deleteEvent(selectedEvent.id)}
+          onTagClick={focusOnTag}
+          onUpdate={(patch) => updateEvent(selectedEvent.id, patch)}
+          tagSuggestions={tagSuggestions}
         />
       )}
 
@@ -814,15 +1110,18 @@ function App() {
         <CreateEventModal
           initialDate={currentDate}
           onClose={() => setShowCreateModal(false)}
+          onCreate={(input) => {
+            createEvent(input)
+            setShowCreateModal(false)
+          }}
+          tagSuggestions={tagSuggestions}
         />
       )}
 
-      {showVoiceModal && (
-        <VoiceModal onClose={() => setShowVoiceModal(false)} />
-      )}
+      {showVoiceModal && <VoiceModal onClose={() => setShowVoiceModal(false)} />}
 
       {showNotifPanel && (
-        <NotificationPanel onClose={() => setShowNotifPanel(false)} />
+        <NotificationPanel notifications={notifications} onClose={() => setShowNotifPanel(false)} />
       )}
     </div>
   )

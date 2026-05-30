@@ -1,18 +1,10 @@
-import {
-  Bell,
-  Clock,
-  MapPin,
-  Pencil,
-  Repeat,
-  Tag,
-  Trash2,
-  Users,
-  X,
-} from 'lucide-react'
-import { useState } from 'react'
+import { Bell, Clock, MapPin, Pencil, Repeat, Tag, Trash2, Users, X } from 'lucide-react'
+import { useEffect, useState } from 'react'
 
 import { getPriorityColor, mockUser } from '../data/mock'
 import type { Attendee, Event, RecurrenceRule, Reminder } from '../data/mock'
+import { TagChip } from './TagChip'
+import { TagInput } from './TagInput'
 
 function formatDateTimeInput(date: Date): string {
   const d = new Date(date)
@@ -65,9 +57,17 @@ function formatReminder(reminder: Reminder): string {
 export function EventModal({
   event,
   onClose,
+  onUpdate,
+  onDelete,
+  onTagClick,
+  tagSuggestions = [],
 }: {
   event: Event
   onClose: () => void
+  onUpdate?: (patch: Partial<Event>) => void
+  onDelete?: () => void
+  onTagClick?: (tag: string) => void
+  tagSuggestions?: string[]
 }) {
   const [isEditing, setIsEditing] = useState(false)
   const [editForm, setEditForm] = useState({
@@ -78,7 +78,49 @@ export function EventModal({
     location: event.location || '',
     priority: event.priority,
     allDay: event.allDay || false,
+    tags: event.tags ?? [],
   })
+
+  function startEditing() {
+    setEditForm({
+      title: event.title,
+      description: event.description || '',
+      startTime: formatDateTimeInput(event.startTime),
+      endTime: event.endTime ? formatDateTimeInput(event.endTime) : '',
+      location: event.location || '',
+      priority: event.priority,
+      allDay: event.allDay || false,
+      tags: event.tags ?? [],
+    })
+    setIsEditing(true)
+  }
+
+  function handleSaveEdit() {
+    if (!onUpdate) {
+      setIsEditing(false)
+      return
+    }
+    const editEndBeforeStart = Boolean(
+      editForm.endTime && editForm.startTime && editForm.endTime < editForm.startTime,
+    )
+    if (!editForm.title.trim() || editEndBeforeStart) return
+    onUpdate({
+      title: editForm.title.trim(),
+      description: editForm.description.trim() || undefined,
+      startTime: new Date(editForm.startTime),
+      endTime: editForm.endTime ? new Date(editForm.endTime) : undefined,
+      allDay: editForm.allDay,
+      location: editForm.location.trim() || undefined,
+      priority: editForm.priority,
+      tags: editForm.tags.length > 0 ? editForm.tags : undefined,
+    })
+    setIsEditing(false)
+  }
+
+  const editEndBeforeStart = Boolean(
+    editForm.endTime && editForm.startTime && editForm.endTime < editForm.startTime,
+  )
+  const canSaveEdit = Boolean(editForm.title.trim()) && !editEndBeforeStart
 
   const priorityLabels: Record<string, string> = {
     high: '紧急',
@@ -86,13 +128,31 @@ export function EventModal({
     low: '低优先级',
   }
 
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        if (isEditing) setIsEditing(false)
+        else onClose()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [isEditing, onClose])
+
   if (isEditing) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
-        <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl bg-white shadow-2xl">
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
+        onClick={() => setIsEditing(false)}
+      >
+        <div
+          className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-2xl"
+          onClick={(e) => e.stopPropagation()}
+        >
           <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
             <h3 className="text-lg font-semibold text-slate-900">编辑事件</h3>
             <button
+              aria-label="关闭"
               className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
               onClick={() => setIsEditing(false)}
               type="button"
@@ -103,14 +163,10 @@ export function EventModal({
 
           <div className="space-y-4 px-6 py-4">
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-slate-700">
-                标题
-              </label>
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">标题</label>
               <input
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
-                onChange={(e) =>
-                  setEditForm((f) => ({ ...f, title: e.target.value }))
-                }
+                onChange={(e) => setEditForm((f) => ({ ...f, title: e.target.value }))}
                 type="text"
                 value={editForm.title}
               />
@@ -118,27 +174,19 @@ export function EventModal({
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-slate-700">
-                  开始时间
-                </label>
+                <label className="mb-1.5 block text-sm font-medium text-slate-700">开始时间</label>
                 <input
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
-                  onChange={(e) =>
-                    setEditForm((f) => ({ ...f, startTime: e.target.value }))
-                  }
+                  onChange={(e) => setEditForm((f) => ({ ...f, startTime: e.target.value }))}
                   type="datetime-local"
                   value={editForm.startTime}
                 />
               </div>
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-slate-700">
-                  结束时间
-                </label>
+                <label className="mb-1.5 block text-sm font-medium text-slate-700">结束时间</label>
                 <input
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
-                  onChange={(e) =>
-                    setEditForm((f) => ({ ...f, endTime: e.target.value }))
-                  }
+                  onChange={(e) => setEditForm((f) => ({ ...f, endTime: e.target.value }))}
                   type="datetime-local"
                   value={editForm.endTime}
                 />
@@ -150,9 +198,7 @@ export function EventModal({
                 checked={editForm.allDay}
                 className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-600"
                 id="allDay"
-                onChange={(e) =>
-                  setEditForm((f) => ({ ...f, allDay: e.target.checked }))
-                }
+                onChange={(e) => setEditForm((f) => ({ ...f, allDay: e.target.checked }))}
                 type="checkbox"
               />
               <label className="text-sm text-slate-700" htmlFor="allDay">
@@ -161,14 +207,10 @@ export function EventModal({
             </div>
 
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-slate-700">
-                地点
-              </label>
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">地点</label>
               <input
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
-                onChange={(e) =>
-                  setEditForm((f) => ({ ...f, location: e.target.value }))
-                }
+                onChange={(e) => setEditForm((f) => ({ ...f, location: e.target.value }))}
                 placeholder="添加地点..."
                 type="text"
                 value={editForm.location}
@@ -176,14 +218,10 @@ export function EventModal({
             </div>
 
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-slate-700">
-                描述
-              </label>
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">描述</label>
               <textarea
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
-                onChange={(e) =>
-                  setEditForm((f) => ({ ...f, description: e.target.value }))
-                }
+                onChange={(e) => setEditForm((f) => ({ ...f, description: e.target.value }))}
                 placeholder="添加描述..."
                 rows={3}
                 value={editForm.description}
@@ -191,9 +229,22 @@ export function EventModal({
             </div>
 
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-slate-700">
-                优先级
+              <label
+                className="mb-1.5 block text-sm font-medium text-slate-700"
+                htmlFor="editEventTags"
+              >
+                标签
               </label>
+              <TagInput
+                id="editEventTags"
+                onChange={(tags) => setEditForm((f) => ({ ...f, tags }))}
+                suggestions={tagSuggestions}
+                value={editForm.tags}
+              />
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">优先级</label>
               <div className="flex gap-2">
                 {(['high', 'normal', 'low'] as const).map((p) => (
                   <button
@@ -226,10 +277,9 @@ export function EventModal({
               取消
             </button>
             <button
-              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-teal-700"
-              onClick={() => {
-                setIsEditing(false)
-              }}
+              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-teal-700 disabled:bg-slate-300"
+              disabled={!canSaveEdit}
+              onClick={handleSaveEdit}
               type="button"
             >
               保存更改
@@ -241,8 +291,14 @@ export function EventModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl bg-white shadow-2xl">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
         <div
           className={`relative px-6 pt-5 pb-4 ${
@@ -262,19 +318,29 @@ export function EventModal({
             </div>
             <div className="flex items-center gap-1">
               <button
+                aria-label="编辑"
                 className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 transition hover:bg-white/60 hover:text-slate-700"
-                onClick={() => setIsEditing(true)}
+                onClick={startEditing}
                 type="button"
               >
                 <Pencil size={16} />
               </button>
               <button
+                aria-label="删除"
                 className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 transition hover:bg-white/60 hover:text-rose-600"
+                onClick={() => {
+                  if (!onDelete) return
+                  if (window.confirm(`确定要删除事件「${event.title}」吗？此操作无法撤销。`)) {
+                    onDelete()
+                    onClose()
+                  }
+                }}
                 type="button"
               >
                 <Trash2 size={16} />
               </button>
               <button
+                aria-label="关闭"
                 className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-white/60 hover:text-slate-600"
                 onClick={onClose}
                 type="button"
@@ -304,9 +370,7 @@ export function EventModal({
                   结束：{formatDateTimeDisplay(event.endTime)}
                 </div>
               ) : null}
-              <div className="mt-0.5 text-xs text-slate-400">
-                时区：{event.timezone}
-              </div>
+              <div className="mt-0.5 text-xs text-slate-400">时区：{event.timezone}</div>
             </div>
           </div>
 
@@ -322,9 +386,7 @@ export function EventModal({
           {event.recurrence ? (
             <div className="flex items-start gap-3 py-2">
               <Repeat size={18} className="mt-0.5 shrink-0 text-slate-400" />
-              <span className="text-sm text-slate-700">
-                {formatRecurrence(event.recurrence)}
-              </span>
+              <span className="text-sm text-slate-700">{formatRecurrence(event.recurrence)}</span>
             </div>
           ) : null}
 
@@ -371,14 +433,23 @@ export function EventModal({
             <div className="flex items-start gap-3 py-2">
               <Tag size={18} className="mt-0.5 shrink-0 text-slate-400" />
               <div className="flex flex-wrap gap-1.5">
-                {event.tags.map((tag) => (
-                  <span
-                    className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-600"
-                    key={tag}
-                  >
-                    {tag}
-                  </span>
-                ))}
+                {event.tags.map((tag) =>
+                  onTagClick ? (
+                    <TagChip
+                      ariaLabel={`聚焦标签「${tag}」`}
+                      clickable
+                      key={tag}
+                      onClick={(t) => {
+                        onTagClick(t)
+                        onClose()
+                      }}
+                      size="md"
+                      tag={tag}
+                    />
+                  ) : (
+                    <TagChip key={tag} size="md" tag={tag} />
+                  ),
+                )}
               </div>
             </div>
           ) : null}
@@ -401,9 +472,22 @@ export function EventModal({
 export function CreateEventModal({
   initialDate,
   onClose,
+  onCreate,
+  tagSuggestions = [],
 }: {
   initialDate?: Date
   onClose: () => void
+  onCreate?: (input: {
+    title: string
+    description?: string
+    startTime: Date
+    endTime?: Date
+    location?: string
+    priority: 'low' | 'normal' | 'high'
+    allDay?: boolean
+    tags?: string[]
+  }) => void
+  tagSuggestions?: string[]
 }) {
   const defaultDate = initialDate || new Date()
   const [form, setForm] = useState({
@@ -412,16 +496,50 @@ export function CreateEventModal({
     startTime: formatDateTimeInput(defaultDate),
     endTime: '',
     location: '',
-    priority: 'normal' as const,
+    priority: 'normal' as 'low' | 'normal' | 'high',
     allDay: false,
+    tags: [] as string[],
   })
 
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  const endBeforeStart = Boolean(form.endTime && form.startTime && form.endTime < form.startTime)
+  const canSubmit = Boolean(form.title.trim()) && !endBeforeStart
+
+  function handleSubmit() {
+    if (!canSubmit) return
+    onCreate?.({
+      title: form.title.trim(),
+      description: form.description.trim() || undefined,
+      startTime: new Date(form.startTime),
+      endTime: form.endTime ? new Date(form.endTime) : undefined,
+      location: form.location.trim() || undefined,
+      priority: form.priority,
+      allDay: form.allDay,
+      tags: form.tags.length > 0 ? form.tags : undefined,
+    })
+    if (!onCreate) onClose()
+  }
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl bg-white shadow-2xl">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
           <h3 className="text-lg font-semibold text-slate-900">创建新事件</h3>
           <button
+            aria-label="关闭"
             className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
             onClick={onClose}
             type="button"
@@ -432,12 +550,16 @@ export function CreateEventModal({
 
         <div className="space-y-4 px-6 py-4">
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-slate-700">
+            <label
+              className="mb-1.5 block text-sm font-medium text-slate-700"
+              htmlFor="newEventTitle"
+            >
               标题
             </label>
             <input
               autoFocus
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
+              id="newEventTitle"
               onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
               placeholder="输入事件标题..."
               type="text"
@@ -447,30 +569,42 @@ export function CreateEventModal({
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-slate-700">
+              <label
+                className="mb-1.5 block text-sm font-medium text-slate-700"
+                htmlFor="newEventStart"
+              >
                 开始时间
               </label>
               <input
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, startTime: e.target.value }))
-                }
+                id="newEventStart"
+                onChange={(e) => setForm((f) => ({ ...f, startTime: e.target.value }))}
                 type="datetime-local"
                 value={form.startTime}
               />
             </div>
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-slate-700">
+              <label
+                className="mb-1.5 block text-sm font-medium text-slate-700"
+                htmlFor="newEventEnd"
+              >
                 结束时间
               </label>
               <input
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, endTime: e.target.value }))
-                }
+                aria-invalid={endBeforeStart}
+                className={`w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 ${
+                  endBeforeStart
+                    ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-100'
+                    : 'border-slate-300 focus:border-teal-600 focus:ring-teal-100'
+                }`}
+                id="newEventEnd"
+                onChange={(e) => setForm((f) => ({ ...f, endTime: e.target.value }))}
                 type="datetime-local"
                 value={form.endTime}
               />
+              {endBeforeStart && (
+                <p className="mt-1 text-xs text-rose-600">结束时间不能早于开始时间</p>
+              )}
             </div>
           </div>
 
@@ -479,9 +613,7 @@ export function CreateEventModal({
               checked={form.allDay}
               className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-600"
               id="newAllDay"
-              onChange={(e) =>
-                setForm((f) => ({ ...f, allDay: e.target.checked }))
-              }
+              onChange={(e) => setForm((f) => ({ ...f, allDay: e.target.checked }))}
               type="checkbox"
             />
             <label className="text-sm text-slate-700" htmlFor="newAllDay">
@@ -490,14 +622,16 @@ export function CreateEventModal({
           </div>
 
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-slate-700">
+            <label
+              className="mb-1.5 block text-sm font-medium text-slate-700"
+              htmlFor="newEventLocation"
+            >
               地点
             </label>
             <input
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
-              onChange={(e) =>
-                setForm((f) => ({ ...f, location: e.target.value }))
-              }
+              id="newEventLocation"
+              onChange={(e) => setForm((f) => ({ ...f, location: e.target.value }))}
               placeholder="添加地点..."
               type="text"
               value={form.location}
@@ -505,14 +639,16 @@ export function CreateEventModal({
           </div>
 
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-slate-700">
+            <label
+              className="mb-1.5 block text-sm font-medium text-slate-700"
+              htmlFor="newEventDescription"
+            >
               描述
             </label>
             <textarea
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
-              onChange={(e) =>
-                setForm((f) => ({ ...f, description: e.target.value }))
-              }
+              id="newEventDescription"
+              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
               placeholder="添加描述..."
               rows={3}
               value={form.description}
@@ -520,9 +656,22 @@ export function CreateEventModal({
           </div>
 
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-slate-700">
-              优先级
+            <label
+              className="mb-1.5 block text-sm font-medium text-slate-700"
+              htmlFor="newEventTags"
+            >
+              标签
             </label>
+            <TagInput
+              id="newEventTags"
+              onChange={(tags) => setForm((f) => ({ ...f, tags }))}
+              suggestions={tagSuggestions}
+              value={form.tags}
+            />
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-slate-700">优先级</label>
             <div className="flex gap-2">
               {(
                 [
@@ -562,8 +711,8 @@ export function CreateEventModal({
           </button>
           <button
             className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-teal-700 disabled:bg-slate-300"
-            disabled={!form.title.trim()}
-            onClick={onClose}
+            disabled={!canSubmit}
+            onClick={handleSubmit}
             type="button"
           >
             创建事件

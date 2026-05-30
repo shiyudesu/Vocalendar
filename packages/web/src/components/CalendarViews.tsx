@@ -1,11 +1,4 @@
-import {
-  CalendarDays,
-  ChevronLeft,
-  ChevronRight,
-  Clock,
-  MapPin,
-  Users,
-} from 'lucide-react'
+import { CalendarDays, ChevronLeft, ChevronRight, Clock, MapPin, Users } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
 import {
@@ -13,9 +6,10 @@ import {
   getEventsForMonth,
   getEventsForWeek,
   getPriorityColor,
-  mockEvents,
 } from '../data/mock'
 import type { Event } from '../data/mock'
+import { getTagPalette, UNTAGGED_PALETTE } from '../lib/tagPalette'
+import { TagChip } from './TagChip'
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i)
 const WEEK_DAYS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
@@ -99,14 +93,14 @@ function EventCard({
 
   return (
     <button
-      className="w-full rounded-lg border border-slate-200 bg-white p-3 text-left shadow-sm transition hover:shadow-md hover:border-slate-300"
+      className="w-full rounded-lg border border-slate-200 bg-white p-3 text-left shadow-sm transition hover:border-slate-300 hover:shadow-md"
       onClick={() => onClick?.(event)}
       type="button"
     >
       <div className="flex items-start gap-2">
         <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${priorityDot}`} />
         <div className="min-w-0 flex-1">
-          <h4 className="font-semibold text-slate-900 truncate">{event.title}</h4>
+          <h4 className="truncate font-semibold text-slate-900">{event.title}</h4>
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-slate-500">
             <span className="flex items-center gap-1">
               <Clock size={12} />
@@ -130,12 +124,7 @@ function EventCard({
           {event.tags && event.tags.length > 0 ? (
             <div className="mt-2 flex flex-wrap gap-1">
               {event.tags.map((tag) => (
-                <span
-                  className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600"
-                  key={tag}
-                >
-                  {tag}
-                </span>
+                <TagChip key={tag} tag={tag} />
               ))}
             </div>
           ) : null}
@@ -149,37 +138,33 @@ function EventCard({
 
 export function DayView({
   date,
+  events,
   onEventClick,
 }: {
   date: Date
+  events: Event[]
   onEventClick: (event: Event) => void
 }) {
-  const events = useMemo(() => getEventsForDate(date), [date])
+  const dayEvents = useMemo(() => getEventsForDate(events, date), [events, date])
 
   const eventPositions = useMemo(() => {
-    const sorted = [...events].sort(
-      (a, b) => a.startTime.getTime() - b.startTime.getTime(),
-    )
+    const sorted = [...dayEvents].sort((a, b) => a.startTime.getTime() - b.startTime.getTime())
     return sorted.map((event) => {
       const startHour = event.startTime.getHours() + event.startTime.getMinutes() / 60
       const endHour = event.endTime
         ? event.endTime.getHours() + event.endTime.getMinutes() / 60
         : startHour + 1
-      const top = startHour * 64
-      const height = Math.max((endHour - startHour) * 64 - 2, 28)
+      const top = startHour * 64 + 2
+      const height = Math.max((endHour - startHour) * 64 - 6, 24)
       return { event, top, height }
     })
-  }, [events])
+  }, [dayEvents])
 
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center gap-3 border-b border-slate-200 px-4 py-3">
-        <h2 className="text-lg font-semibold text-slate-900">
-          {formatDateFull(date)}
-        </h2>
-        <span className="text-sm text-slate-500">
-          {WEEK_DAYS[date.getDay()]}
-        </span>
+        <h2 className="text-lg font-semibold text-slate-900">{formatDateFull(date)}</h2>
+        <span className="text-sm text-slate-500">{WEEK_DAYS[date.getDay()]}</span>
         {isSameDay(date, new Date()) ? (
           <span className="rounded bg-teal-100 px-2 py-0.5 text-xs font-medium text-teal-700">
             今天
@@ -189,41 +174,49 @@ export function DayView({
 
       <div className="relative flex-1 overflow-y-auto">
         <div className="relative min-h-[1536px]">
-          {/* Hour grid lines */}
+          {/* Hour grid lines + time labels */}
           {HOURS.map((hour) => (
-            <div
-              className="absolute right-0 left-14 flex items-center border-b border-slate-100"
-              key={hour}
-              style={{ top: hour * 64, height: 64 }}
-            >
-              <span className="absolute -top-2.5 left-0 w-12 pr-2 text-right text-xs text-slate-400">
+            <div key={hour}>
+              <span
+                className="absolute left-0 w-14 pr-2 text-right text-xs text-slate-400"
+                style={{ top: hour * 64 - 6 }}
+              >
                 {String(hour).padStart(2, '0')}:00
               </span>
+              <div
+                className="absolute right-0 left-16 border-b border-slate-100"
+                style={{ top: hour * 64, height: 64 }}
+              />
             </div>
           ))}
 
           {/* Events */}
-          {eventPositions.map(({ event, top, height }) => (
-            <button
-              className="absolute right-2 left-16 cursor-pointer overflow-hidden rounded-md border border-teal-200 bg-teal-50 px-2 py-1 text-left text-xs transition hover:bg-teal-100"
-              key={event.id}
-              onClick={() => onEventClick(event)}
-              style={{ top, height }}
-              type="button"
-            >
-              <div className="flex items-center gap-1.5">
-                <span
-                  className={`h-1.5 w-1.5 shrink-0 rounded-full ${getPriorityColor(event.priority)}`}
-                />
-                <span className="truncate font-medium text-slate-800">
-                  {event.title}
-                </span>
-              </div>
-              <div className="mt-0.5 truncate text-[10px] text-slate-500">
-                {event.location}
-              </div>
-            </button>
-          ))}
+          {eventPositions.map(({ event, top, height }) => {
+            const palette =
+              event.tags && event.tags.length > 0 ? getTagPalette(event.tags[0]) : UNTAGGED_PALETTE
+            const isHigh = event.priority === 'high'
+            return (
+              <button
+                className={`absolute right-2 left-16 cursor-pointer overflow-hidden rounded-md border ${palette.eventBg} ${palette.eventBorder} ${palette.eventHover} px-2 py-1 text-left text-xs transition ${
+                  isHigh ? 'ring-2 ring-rose-400/40' : ''
+                }`}
+                key={event.id}
+                onClick={() => onEventClick(event)}
+                style={{ top, height }}
+                type="button"
+              >
+                <div className="flex items-center gap-1.5">
+                  <span
+                    className={`h-1.5 w-1.5 shrink-0 rounded-full ${getPriorityColor(event.priority)}`}
+                  />
+                  <span className={`truncate text-sm font-medium ${palette.eventText}`}>
+                    {event.title}
+                  </span>
+                </div>
+                <div className="mt-0.5 truncate text-[11px] text-slate-500">{event.location}</div>
+              </button>
+            )
+          })}
         </div>
       </div>
     </div>
@@ -234,9 +227,11 @@ export function DayView({
 
 export function WeekView({
   weekStart,
+  events,
   onEventClick,
 }: {
   weekStart: Date
+  events: Event[]
   onEventClick: (event: Event) => void
 }) {
   const days = useMemo(() => {
@@ -249,7 +244,7 @@ export function WeekView({
     return result
   }, [weekStart])
 
-  const allEvents = useMemo(() => getEventsForWeek(weekStart), [weekStart])
+  const allEvents = useMemo(() => getEventsForWeek(events, weekStart), [events, weekStart])
 
   const eventsByDay = useMemo(() => {
     const map: Record<number, Event[]> = {}
@@ -295,15 +290,11 @@ export function WeekView({
 
       {/* Body */}
       <div className="flex-1 overflow-y-auto">
-        <div className="grid grid-cols-[60px_repeat(7,1fr)] min-h-[1536px]">
+        <div className="grid min-h-[1536px] grid-cols-[60px_repeat(7,1fr)]">
           {/* Time labels */}
           <div className="border-r border-slate-100">
             {HOURS.map((hour) => (
-              <div
-                className="flex items-start justify-end pr-2"
-                key={hour}
-                style={{ height: 64 }}
-              >
+              <div className="flex items-start justify-end pr-2" key={hour} style={{ height: 64 }}>
                 <span className="text-[11px] text-slate-400">
                   {String(hour).padStart(2, '0')}:00
                 </span>
@@ -315,13 +306,12 @@ export function WeekView({
           {days.map((day, dayIndex) => {
             const dayEvents = eventsByDay[dayIndex]
             const eventPositions = dayEvents.map((event) => {
-              const startHour =
-                event.startTime.getHours() + event.startTime.getMinutes() / 60
+              const startHour = event.startTime.getHours() + event.startTime.getMinutes() / 60
               const endHour = event.endTime
                 ? event.endTime.getHours() + event.endTime.getMinutes() / 60
                 : startHour + 1
-              const top = startHour * 64
-              const height = Math.max((endHour - startHour) * 64 - 2, 28)
+              const top = startHour * 64 + 2
+              const height = Math.max((endHour - startHour) * 64 - 6, 24)
               return { event, top, height }
             })
 
@@ -332,35 +322,40 @@ export function WeekView({
               >
                 {/* Hour lines */}
                 {HOURS.map((hour) => (
-                  <div
-                    className="border-b border-slate-50"
-                    key={hour}
-                    style={{ height: 64 }}
-                  />
+                  <div className="border-b border-slate-50" key={hour} style={{ height: 64 }} />
                 ))}
 
                 {/* Events */}
-                {eventPositions.map(({ event, top, height }) => (
-                  <button
-                    className="absolute right-0.5 left-0.5 cursor-pointer overflow-hidden rounded border border-teal-200 bg-teal-50 px-1 py-0.5 text-left transition hover:bg-teal-100"
-                    key={event.id}
-                    onClick={() => onEventClick(event)}
-                    style={{ top, height }}
-                    type="button"
-                  >
-                    <div className="flex items-center gap-1">
-                      <span
-                        className={`h-1 w-1 shrink-0 rounded-full ${getPriorityColor(event.priority)}`}
-                      />
-                      <span className="truncate text-[11px] font-medium text-slate-800">
-                        {event.title}
-                      </span>
-                    </div>
-                    <div className="truncate text-[9px] text-slate-500">
-                      {formatTime(event.startTime)}
-                    </div>
-                  </button>
-                ))}
+                {eventPositions.map(({ event, top, height }) => {
+                  const palette =
+                    event.tags && event.tags.length > 0
+                      ? getTagPalette(event.tags[0])
+                      : UNTAGGED_PALETTE
+                  const isHigh = event.priority === 'high'
+                  return (
+                    <button
+                      className={`absolute right-0.5 left-0.5 cursor-pointer overflow-hidden rounded border ${palette.eventBg} ${palette.eventBorder} ${palette.eventHover} px-1.5 py-1 text-left transition ${
+                        isHigh ? 'ring-2 ring-rose-400/40' : ''
+                      }`}
+                      key={event.id}
+                      onClick={() => onEventClick(event)}
+                      style={{ top, height }}
+                      type="button"
+                    >
+                      <div className="flex items-center gap-1">
+                        <span
+                          className={`h-1.5 w-1.5 shrink-0 rounded-full ${getPriorityColor(event.priority)}`}
+                        />
+                        <span className={`truncate text-xs font-semibold ${palette.eventText}`}>
+                          {event.title}
+                        </span>
+                      </div>
+                      <div className="truncate text-[11px] text-slate-500">
+                        {formatTime(event.startTime)}
+                      </div>
+                    </button>
+                  )
+                })}
               </div>
             )
           })}
@@ -375,14 +370,16 @@ export function WeekView({
 export function MonthView({
   year,
   month,
+  events,
   onEventClick,
 }: {
   year: number
   month: number
+  events: Event[]
   onEventClick: (event: Event) => void
 }) {
   const gridDays = useMemo(() => getMonthGrid(year, month), [year, month])
-  const monthEvents = useMemo(() => getEventsForMonth(year, month), [year, month])
+  const monthEvents = useMemo(() => getEventsForMonth(events, year, month), [events, year, month])
 
   const eventsByDay = useMemo(() => {
     const map: Record<string, Event[]> = {}
@@ -402,10 +399,7 @@ export function MonthView({
       {/* Weekday headers */}
       <div className="grid grid-cols-7 border-b border-slate-200">
         {WEEK_DAYS_SHORT.map((day) => (
-          <div
-            className="py-2 text-center text-xs font-medium text-slate-500"
-            key={day}
-          >
+          <div className="py-2 text-center text-xs font-medium text-slate-500" key={day}>
             {day}
           </div>
         ))}
@@ -421,7 +415,7 @@ export function MonthView({
 
           return (
             <div
-              className={`flex flex-col border-b border-r border-slate-100 p-1.5 ${
+              className={`flex flex-col border-r border-b border-slate-100 p-1.5 ${
                 !isCurrentMonth ? 'bg-slate-50/50' : ''
               } ${index % 7 === 6 ? 'border-r-0' : ''}`}
               key={index}
@@ -439,9 +433,7 @@ export function MonthView({
                   {day.getDate()}
                 </span>
                 {dayEvents.length > 0 ? (
-                  <span className="text-[10px] text-slate-400">
-                    {dayEvents.length}个
-                  </span>
+                  <span className="text-[10px] text-slate-400">{dayEvents.length}个</span>
                 ) : null}
               </div>
               <div className="mt-1 flex flex-col gap-0.5 overflow-hidden">
@@ -477,12 +469,16 @@ export function MonthView({
 
 // ─── List View ───
 
-export function ListView({ onEventClick }: { onEventClick: (event: Event) => void }) {
+export function ListView({
+  events,
+  onEventClick,
+}: {
+  events: Event[]
+  onEventClick: (event: Event) => void
+}) {
   const sortedEvents = useMemo(() => {
-    return [...mockEvents].sort(
-      (a, b) => a.startTime.getTime() - b.startTime.getTime(),
-    )
-  }, [])
+    return [...events].sort((a, b) => a.startTime.getTime() - b.startTime.getTime())
+  }, [events])
 
   const groupedEvents = useMemo(() => {
     const groups: Record<string, Event[]> = {}
@@ -508,12 +504,8 @@ export function ListView({ onEventClick }: { onEventClick: (event: Event) => voi
           return (
             <div className="px-4 py-4" key={dateKey}>
               <div className="mb-3 flex items-center gap-2">
-                <h3 className="text-sm font-semibold text-slate-700">
-                  {formatDateFull(date)}
-                </h3>
-                <span className="text-xs text-slate-500">
-                  {WEEK_DAYS[date.getDay()]}
-                </span>
+                <h3 className="text-sm font-semibold text-slate-700">{formatDateFull(date)}</h3>
+                <span className="text-xs text-slate-500">{WEEK_DAYS[date.getDay()]}</span>
                 {isToday ? (
                   <span className="rounded bg-teal-100 px-2 py-0.5 text-xs font-medium text-teal-700">
                     今天
@@ -522,11 +514,7 @@ export function ListView({ onEventClick }: { onEventClick: (event: Event) => voi
               </div>
               <div className="flex flex-col gap-2 pl-2">
                 {events.map((event) => (
-                  <EventCard
-                    event={event}
-                    key={event.id}
-                    onClick={onEventClick}
-                  />
+                  <EventCard event={event} key={event.id} onClick={onEventClick} />
                 ))}
               </div>
             </div>
@@ -544,29 +532,32 @@ export type CalendarViewType = 'day' | 'week' | 'month' | 'list'
 export function CalendarContainer({
   view,
   currentDate,
+  events,
   onEventClick,
 }: {
   view: CalendarViewType
   currentDate: Date
+  events: Event[]
   onEventClick: (event: Event) => void
 }) {
   switch (view) {
     case 'day':
-      return <DayView date={currentDate} onEventClick={onEventClick} />
+      return <DayView date={currentDate} events={events} onEventClick={onEventClick} />
     case 'week': {
       const weekStart = getWeekStart(currentDate)
-      return <WeekView onEventClick={onEventClick} weekStart={weekStart} />
+      return <WeekView events={events} onEventClick={onEventClick} weekStart={weekStart} />
     }
     case 'month':
       return (
         <MonthView
+          events={events}
           month={currentDate.getMonth()}
           onEventClick={onEventClick}
           year={currentDate.getFullYear()}
         />
       )
     case 'list':
-      return <ListView onEventClick={onEventClick} />
+      return <ListView events={events} onEventClick={onEventClick} />
     default:
       return null
   }
@@ -574,11 +565,7 @@ export function CalendarContainer({
 
 // ─── Navigation Helpers ───
 
-export function navigateDate(
-  date: Date,
-  view: CalendarViewType,
-  direction: 'prev' | 'next',
-): Date {
+export function navigateDate(date: Date, view: CalendarViewType, direction: 'prev' | 'next'): Date {
   const d = new Date(date)
   if (view === 'day') {
     d.setDate(d.getDate() + (direction === 'next' ? 1 : -1))
@@ -627,9 +614,7 @@ export function CalendarViewSwitcher({
       {options.map((opt) => (
         <button
           className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
-            view === opt.value
-              ? 'bg-slate-900 text-white'
-              : 'text-slate-600 hover:bg-slate-50'
+            view === opt.value ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-50'
           }`}
           key={opt.value}
           onClick={() => onChange(opt.value)}
@@ -657,6 +642,7 @@ export function DateNavigator({
     <div className="flex items-center gap-2">
       <div className="flex items-center rounded-lg border border-slate-200 bg-white shadow-sm">
         <button
+          aria-label="上一个"
           className="flex h-8 w-8 items-center justify-center rounded-l-lg text-slate-600 transition hover:bg-slate-50"
           onClick={() => onNavigate('prev')}
           type="button"
@@ -664,6 +650,7 @@ export function DateNavigator({
           <ChevronLeft size={16} />
         </button>
         <button
+          aria-label="下一个"
           className="flex h-8 w-8 items-center justify-center rounded-r-lg border-l border-slate-100 text-slate-600 transition hover:bg-slate-50"
           onClick={() => onNavigate('next')}
           type="button"
@@ -678,7 +665,7 @@ export function DateNavigator({
       >
         今天
       </button>
-      <h2 className="ml-2 text-lg font-semibold text-slate-900">
+      <h2 className="ml-2 hidden truncate text-lg font-semibold text-slate-900 sm:block">
         {getDateRangeLabel(date, view)}
       </h2>
     </div>

@@ -104,9 +104,7 @@ export const mockEvents: Event[] = [
     endTime: setTime(today, 10, 0),
     timezone: 'Asia/Shanghai',
     location: '会议室 A',
-    reminders: [
-      { id: 'rem-001', eventId: 'evt-001', minutesBefore: 10, method: 'push' },
-    ],
+    reminders: [{ id: 'rem-001', eventId: 'evt-001', minutesBefore: 10, method: 'push' }],
     attendees: [
       { id: 'att-001', name: '李明', status: 'accepted' },
       { id: 'att-002', name: '王芳', status: 'accepted' },
@@ -148,9 +146,7 @@ export const mockEvents: Event[] = [
     endTime: setTime(today, 13, 30),
     timezone: 'Asia/Shanghai',
     location: '海底捞（国贸店）',
-    reminders: [
-      { id: 'rem-004', eventId: 'evt-003', minutesBefore: 15, method: 'push' },
-    ],
+    reminders: [{ id: 'rem-004', eventId: 'evt-003', minutesBefore: 15, method: 'push' }],
     attendees: [
       { id: 'att-006', name: '小明', status: 'accepted' },
       { id: 'att-007', name: '小红', status: 'accepted' },
@@ -173,9 +169,7 @@ export const mockEvents: Event[] = [
       frequency: 'weekly',
       byWeekDay: [1, 3, 5],
     },
-    reminders: [
-      { id: 'rem-005', eventId: 'evt-004', minutesBefore: 30, method: 'push' },
-    ],
+    reminders: [{ id: 'rem-005', eventId: 'evt-004', minutesBefore: 30, method: 'push' }],
     priority: 'low',
     tags: ['健康', '运动'],
     source: 'voice',
@@ -190,9 +184,7 @@ export const mockEvents: Event[] = [
     endTime: setTime(addDays(today, 1), 16, 0),
     timezone: 'Asia/Shanghai',
     location: '线上腾讯会议',
-    reminders: [
-      { id: 'rem-006', eventId: 'evt-005', minutesBefore: 15, method: 'push' },
-    ],
+    reminders: [{ id: 'rem-006', eventId: 'evt-005', minutesBefore: 15, method: 'push' }],
     attendees: [
       { id: 'att-008', name: '产品经理', status: 'accepted' },
       { id: 'att-009', name: '技术负责人', status: 'pending' },
@@ -229,9 +221,7 @@ export const mockEvents: Event[] = [
     endTime: setTime(addDays(today, 4), 11, 0),
     timezone: 'Asia/Shanghai',
     location: '首都机场 T3',
-    reminders: [
-      { id: 'rem-009', eventId: 'evt-007', minutesBefore: 120, method: 'push' },
-    ],
+    reminders: [{ id: 'rem-009', eventId: 'evt-007', minutesBefore: 120, method: 'push' }],
     priority: 'high',
     tags: ['出差', '工作'],
     source: 'manual',
@@ -246,9 +236,7 @@ export const mockEvents: Event[] = [
     endTime: setTime(addDays(today, 5), 23, 59),
     allDay: true,
     timezone: 'Asia/Shanghai',
-    reminders: [
-      { id: 'rem-010', eventId: 'evt-008', minutesBefore: 0, method: 'push' },
-    ],
+    reminders: [{ id: 'rem-010', eventId: 'evt-008', minutesBefore: 0, method: 'push' }],
     priority: 'high',
     tags: ['家庭', '生日'],
     source: 'manual',
@@ -263,9 +251,7 @@ export const mockEvents: Event[] = [
     endTime: setTime(addDays(today, -1), 15, 30),
     timezone: 'Asia/Shanghai',
     location: '线上',
-    reminders: [
-      { id: 'rem-011', eventId: 'evt-009', minutesBefore: 10, method: 'push' },
-    ],
+    reminders: [{ id: 'rem-011', eventId: 'evt-009', minutesBefore: 10, method: 'push' }],
     priority: 'normal',
     tags: ['工作', '开发'],
     source: 'manual',
@@ -280,9 +266,7 @@ export const mockEvents: Event[] = [
     endTime: setTime(addDays(today, 6), 12, 0),
     timezone: 'Asia/Shanghai',
     location: '家中书房',
-    reminders: [
-      { id: 'rem-012', eventId: 'evt-010', minutesBefore: 0, method: 'push' },
-    ],
+    reminders: [{ id: 'rem-012', eventId: 'evt-010', minutesBefore: 0, method: 'push' }],
     priority: 'low',
     tags: ['学习', '阅读'],
     source: 'voice',
@@ -354,11 +338,11 @@ export const mockNotifications = [
   },
 ]
 
-export function getEventsForDate(date: Date): Event[] {
+export function getEventsForDate(events: Event[], date: Date): Event[] {
   const startOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0)
   const endOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59)
 
-  return mockEvents.filter((event) => {
+  return events.filter((event) => {
     if (event.allDay) {
       const eventDay = new Date(
         event.startTime.getFullYear(),
@@ -375,24 +359,24 @@ export function getEventsForDate(date: Date): Event[] {
   })
 }
 
-export function getEventsForWeek(weekStart: Date): Event[] {
+export function getEventsForWeek(events: Event[], weekStart: Date): Event[] {
   const start = new Date(weekStart)
   start.setHours(0, 0, 0, 0)
   const end = new Date(start)
   end.setDate(end.getDate() + 6)
   end.setHours(23, 59, 59, 999)
 
-  return mockEvents.filter((event) => {
+  return events.filter((event) => {
     const eventStart = event.startTime
     return eventStart >= start && eventStart <= end
   })
 }
 
-export function getEventsForMonth(year: number, month: number): Event[] {
+export function getEventsForMonth(events: Event[], year: number, month: number): Event[] {
   const start = new Date(year, month, 1, 0, 0, 0)
   const end = new Date(year, month + 1, 0, 23, 59, 59)
 
-  return mockEvents.filter((event) => {
+  return events.filter((event) => {
     const eventStart = event.startTime
     return eventStart >= start && eventStart <= end
   })
