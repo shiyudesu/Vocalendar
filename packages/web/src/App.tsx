@@ -931,7 +931,7 @@ function App() {
 
         {/* Mini Calendar - only show on calendar page */}
         {page === 'calendar' && (
-          <div className="space-y-3 px-3 pb-3">
+          <div className="space-y-3 px-3 pt-4 pb-3">
             <MiniCalendar
               currentDate={currentDate}
               events={visibleEvents}
