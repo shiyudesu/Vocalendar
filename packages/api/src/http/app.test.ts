@@ -35,8 +35,35 @@ type DraftResponsePayload = {
 
 type EventListResponsePayload = {
   data: {
-    items: unknown[]
+    items: Array<{
+      id: string
+      title: string
+      startAt: string
+      location: string | null
+    }>
     total: number
+  }
+}
+
+type EventResponsePayload = {
+  data: {
+    event: {
+      id: string
+      title: string
+      startAt: string
+      endAt: string | null
+      timezone: string
+      location: string | null
+      participants: string[]
+      source: string
+      status: string
+      createdAt: string
+      updatedAt: string
+    }
+  }
+  meta: {
+    requestId: string
+    timestamp: string
   }
 }
 
@@ -206,6 +233,132 @@ describe('v0.1 API contract', () => {
     expect(payload.error.message).toBe('Source text cannot be parsed into a valid draft.')
     expect(payload.error.details).toEqual({ sourceText: '啊啊啊' })
     expect(payload.meta.requestId).toBe('dev-request')
+    expect(payload.meta.timestamp).toMatch(isoTimestampPattern)
+  })
+
+  test('updates a draft, creates an event, and returns it in the recent list', async () => {
+    eventMemoryRepository.reset()
+    const app = createApp()
+
+    const draftResponse = await app.request('/api/v1/drafts', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        sourceText: '明天和张总喝咖啡',
+        timezone: 'Asia/Shanghai',
+        referenceAt: '2026-05-29T02:00:00Z',
+        source: 'text',
+      }),
+    })
+    const draftPayload = (await draftResponse.json()) as DraftResponsePayload
+
+    const updateResponse = await app.request(`/api/v1/drafts/${draftPayload.data.draft.draftId}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        userInput: '下午三点开始',
+        referenceAt: '2026-05-29T02:05:00Z',
+        fields: {
+          location: '国贸',
+        },
+      }),
+    })
+    const updatePayload = (await updateResponse.json()) as DraftResponsePayload
+
+    expect(updateResponse.status).toBe(200)
+    expect(updatePayload.data.draft.parsed.title).toBe('喝咖啡')
+    expect(updatePayload.data.draft.parsed.startAt).toBe('2026-05-30T07:00:00.000Z')
+    expect(updatePayload.data.draft.parsed.location).toBe('国贸')
+    expect(updatePayload.data.draft.parsed.participants).toEqual(['张总'])
+    expect(updatePayload.data.draft.missingFields).toEqual([])
+    expect(updatePayload.data.draft.canSave).toBe(true)
+    expect(updatePayload.data.draft.clarificationPrompt).toBeNull()
+
+    const eventResponse = await app.request('/api/v1/events', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        draftId: draftPayload.data.draft.draftId,
+      }),
+    })
+    const eventPayload = (await eventResponse.json()) as EventResponsePayload
+
+    expect(eventResponse.status).toBe(200)
+    expect(eventPayload.data.event.id).toEqual(expect.any(String))
+    expect(eventPayload.data.event.title).toBe('喝咖啡')
+    expect(eventPayload.data.event.startAt).toBe('2026-05-30T07:00:00.000Z')
+    expect(eventPayload.data.event.location).toBe('国贸')
+    expect(eventPayload.data.event.status).toBe('confirmed')
+    expect(eventPayload.meta.timestamp).toMatch(isoTimestampPattern)
+
+    const recentResponse = await app.request('/api/v1/events?mode=recent&limit=5')
+    const recentPayload = (await recentResponse.json()) as EventListResponsePayload
+
+    expect(recentResponse.status).toBe(200)
+    expect(recentPayload.data.total).toBe(1)
+    expect(recentPayload.data.items).toHaveLength(1)
+    expect(recentPayload.data.items[0]).toEqual(
+      expect.objectContaining({
+        id: eventPayload.data.event.id,
+        title: '喝咖啡',
+        startAt: '2026-05-30T07:00:00.000Z',
+        location: '国贸',
+      }),
+    )
+  })
+
+  test('rejects draft updates when the draft is missing', async () => {
+    eventMemoryRepository.reset()
+    const app = createApp()
+
+    const response = await app.request('/api/v1/drafts/drf_missing', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        fields: {
+          title: '喝咖啡',
+        },
+      }),
+    })
+    const payload = (await response.json()) as ErrorResponsePayload
+
+    expect(response.status).toBe(404)
+    expect(payload.error.code).toBe('NOT_FOUND')
+    expect(payload.error.details).toEqual({ draftId: 'drf_missing' })
+    expect(payload.meta.timestamp).toMatch(isoTimestampPattern)
+  })
+
+  test('rejects event creation when the draft still has missing fields', async () => {
+    eventMemoryRepository.reset()
+    const app = createApp()
+
+    const draftResponse = await app.request('/api/v1/drafts', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        sourceText: '明天和张总喝咖啡',
+        timezone: 'Asia/Shanghai',
+        referenceAt: '2026-05-29T02:00:00Z',
+        source: 'text',
+      }),
+    })
+    const draftPayload = (await draftResponse.json()) as DraftResponsePayload
+
+    const response = await app.request('/api/v1/events', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        draftId: draftPayload.data.draft.draftId,
+      }),
+    })
+    const payload = (await response.json()) as ErrorResponsePayload
+
+    expect(response.status).toBe(422)
+    expect(payload.error.code).toBe('DRAFT_MISSING_FIELDS')
+    expect(payload.error.details).toEqual({
+      draftId: draftPayload.data.draft.draftId,
+      missingFields: ['startAt'],
+    })
     expect(payload.meta.timestamp).toMatch(isoTimestampPattern)
   })
 

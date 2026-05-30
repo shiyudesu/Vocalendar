@@ -2,7 +2,7 @@ import { createEventRequestSchema, listEventsQuerySchema } from '@vocalendar/sch
 import { Hono } from 'hono'
 
 import { createEventFromDraft, listRecentEvents } from '../../services/events/event.service.js'
-import { ok, validationError } from '../utils/responses.js'
+import { draftMissingFields, notFound, ok, validationError } from '../utils/responses.js'
 
 export const eventRoutes = new Hono()
 
@@ -29,20 +29,18 @@ eventRoutes.post('/', async (c) => {
     return validationError(c, result.error.flatten())
   }
 
-  const event = createEventFromDraft(result.data.draftId)
+  const createResult = createEventFromDraft(result.data.draftId)
 
-  if (!event) {
-    return c.json(
-      {
-        error: {
-          code: 'DRAFT_MISSING_FIELDS',
-          message: 'Draft does not exist or cannot be saved.',
-          details: { draftId: result.data.draftId },
-        },
-      },
-      422,
-    )
+  if (!createResult.ok) {
+    if (createResult.reason === 'not_found') {
+      return notFound(c, 'Draft was not found.', { draftId: result.data.draftId })
+    }
+
+    return draftMissingFields(c, {
+      draftId: result.data.draftId,
+      missingFields: createResult.missingFields,
+    })
   }
 
-  return ok(c, { event })
+  return ok(c, { event: createResult.event })
 })

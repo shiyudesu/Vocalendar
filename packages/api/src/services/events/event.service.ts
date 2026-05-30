@@ -3,11 +3,37 @@ import type { Event } from '@vocalendar/schemas'
 import { eventMemoryRepository } from '../../repositories/events.memory.js'
 import { nowIso } from '../../utils/clock.js'
 
-export function createEventFromDraft(draftId: string): Event | null {
+export type CreateEventFromDraftResult =
+  | {
+      ok: true
+      event: Event
+    }
+  | {
+      ok: false
+      reason: 'not_found'
+    }
+  | {
+      ok: false
+      reason: 'missing_fields'
+      missingFields: string[]
+    }
+
+export function createEventFromDraft(draftId: string): CreateEventFromDraftResult {
   const draft = eventMemoryRepository.findDraft(draftId)
 
-  if (!draft || !draft.canSave || !draft.parsed.title || !draft.parsed.startAt) {
-    return null
+  if (!draft) {
+    return {
+      ok: false,
+      reason: 'not_found',
+    }
+  }
+
+  if (!draft.canSave || !draft.parsed.title || !draft.parsed.startAt) {
+    return {
+      ok: false,
+      reason: 'missing_fields',
+      missingFields: draft.missingFields,
+    }
   }
 
   const timestamp = nowIso()
@@ -26,7 +52,10 @@ export function createEventFromDraft(draftId: string): Event | null {
     updatedAt: timestamp,
   }
 
-  return eventMemoryRepository.saveEvent(event)
+  return {
+    ok: true,
+    event: eventMemoryRepository.saveEvent(event),
+  }
 }
 
 export function listRecentEvents(limit: number) {

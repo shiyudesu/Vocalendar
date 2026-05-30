@@ -45,3 +45,37 @@ export function draftParseFailed(c: Context, details: unknown) {
     422,
   )
 }
+
+export function notFound(c: Context, message: string, details: unknown) {
+  return c.json(
+    {
+      error: {
+        code: 'NOT_FOUND',
+        message,
+        details,
+      },
+      meta: {
+        requestId: c.req.header('x-request-id') ?? 'dev-request',
+        timestamp: nowIso(),
+      },
+    },
+    404,
+  )
+}
+
+export function draftMissingFields(c: Context, details: unknown) {
+  return c.json(
+    {
+      error: {
+        code: 'DRAFT_MISSING_FIELDS',
+        message: 'Draft is missing required fields.',
+        details,
+      },
+      meta: {
+        requestId: c.req.header('x-request-id') ?? 'dev-request',
+        timestamp: nowIso(),
+      },
+    },
+    422,
+  )
+}
