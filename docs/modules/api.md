@@ -31,6 +31,7 @@
 
 - 语音识别（ASR）
   - 提供音频上传识别接口
+  - 提供实时语音识别 WebSocket 接口
   - 提供 provider 能力状态接口
   - 识别结果回到 `drafts` / 快捷指令链路
 - 语音反馈（TTS）
@@ -62,7 +63,7 @@
 
 ### MVP
 
-- 邮箱注册 / 登录 / 刷新 / 注销
+- 本地邮箱注册 / 登录 / 刷新 / 注销
 - 当前用户资料与设置
 - 事件 CRUD
 - 时间范围查询 / 关键词搜索
@@ -72,11 +73,11 @@
 
 ### V1.0
 
-- OAuth 登录
 - 重复事件范围更新 / 删除
 - 提醒数组更新
 - 数据导出
 - 在线 ASR 上传识别
+- 实时 ASR WebSocket 会话
 - TTS 播报音频生成
 - 语音能力状态接口
 - 语音历史
@@ -119,7 +120,7 @@
 | `#16` | 提醒数组更新 / 通知基础接口 | V1.0 | Schemas | ⏳ 待开始 |
 | `#17` | 认证与账户接口 | MVP | Schemas | ⏳ 待开始 |
 | `#18` | 重复事件范围更新 / 删除接口 | V1.0 | Schemas / 仓储 | ⏳ 待开始 |
-| `#19` | `POST /voice/asr` 与 provider 抽象 | V1.0 | Voice provider | ⏳ 待开始 |
+| `#19` | `POST /voice/asr` + `GET /voice/asr/ws` 与 provider 抽象 | V1.0 | Voice provider | ⏳ 待开始 |
 | `#20` | `POST /voice/tts` 与设置联动 | V1.0 | TTS provider | ⏳ 待开始 |
 | `#21` | `GET /voice/providers` 能力状态接口 | V1.0 | 配置层 | ⏳ 待开始 |
 | `#22` | 语音历史接口 | V1.0 | 仓储 | ⏳ 待开始 |

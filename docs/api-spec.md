@@ -216,9 +216,8 @@
 
 | 方法 | 路径 | 作用 | 阶段 |
 | --- | --- | --- | --- |
-| `POST` | `/auth/register` | 邮箱 + 验证码注册 | MVP |
+| `POST` | `/auth/register` | 邮箱密码注册 | MVP |
 | `POST` | `/auth/login` | 邮箱密码登录 | MVP |
-| `POST` | `/auth/oauth/{provider}` | OAuth 登录 | V1.0 |
 | `POST` | `/auth/refresh` | 刷新令牌 | MVP |
 | `POST` | `/auth/logout` | 注销会话 | MVP |
 | `GET` | `/me` | 获取当前用户 | MVP |
@@ -279,6 +278,7 @@
 | 方法 | 路径 | 作用 | 阶段 |
 | --- | --- | --- | --- |
 | `POST` | `/voice/asr` | 上传音频并做在线识别 | V1.0 |
+| `GET` | `/voice/asr/ws` | 建立实时语音识别 WebSocket 会话 | V1.0 |
 | `POST` | `/voice/tts` | 生成播报音频 | V1.0 |
 | `GET` | `/voice/providers` | 获取语音 provider / 离线能力状态 | V1.0 |
 
@@ -287,6 +287,8 @@
 - `VAD` 不是独立 API
 - 客户端负责停录时机
 - API 负责音频接收、ASR 调用、失败处理和草稿衔接
+- `GET /voice/asr/ws` 通过 `accessToken` query 参数鉴权
+- API 服务端代理阿里云实时识别 WebSocket 协议，不将 provider 协议暴露给客户端
 
 ### 4.6 Intelligence
 
@@ -382,7 +384,95 @@
 }
 ```
 
-### 5.3 `POST /voice/tts`
+### 5.3 `GET /voice/asr/ws`
+
+连接方式：
+
+- URL：`/api/v1/voice/asr/ws?accessToken=<jwt>`
+- 协议：WebSocket
+- 鉴权：使用当前用户 `accessToken`
+
+客户端开始消息：
+
+```json
+{
+  "type": "session.start",
+  "audioFormat": "pcm",
+  "sampleRate": 16000,
+  "language": "zh-CN",
+  "enableIntermediateResult": true,
+  "enablePunctuation": true,
+  "enableInverseTextNormalization": true
+}
+```
+
+客户端音频消息：
+
+- 二进制帧
+- 每帧内容为连续音频数据
+- 首期支持 `pcm / 16kHz / mono`
+
+客户端结束消息：
+
+```json
+{
+  "type": "session.finish"
+}
+```
+
+服务端开始响应：
+
+```json
+{
+  "type": "session.started",
+  "sessionId": "vasr_001"
+}
+```
+
+服务端中间结果：
+
+```json
+{
+  "type": "transcript.partial",
+  "sessionId": "vasr_001",
+  "text": "明天下午三点",
+  "confidence": 0.96,
+  "isFinal": false
+}
+```
+
+服务端最终结果：
+
+```json
+{
+  "type": "transcript.final",
+  "sessionId": "vasr_001",
+  "text": "明天下午三点和张总开会",
+  "confidence": 0.97,
+  "isFinal": true
+}
+```
+
+服务端结束响应：
+
+```json
+{
+  "type": "session.finished",
+  "sessionId": "vasr_001"
+}
+```
+
+服务端错误响应：
+
+```json
+{
+  "type": "error",
+  "code": "VOICE_PROVIDER_UNAVAILABLE",
+  "message": "Aliyun realtime ASR failed."
+}
+```
+
+### 5.4 `POST /voice/tts`
 
 请求体：
 
@@ -411,7 +501,7 @@
 }
 ```
 
-### 5.4 `POST /intelligence/conflicts`
+### 5.5 `POST /intelligence/conflicts`
 
 请求体：
 
@@ -425,7 +515,7 @@
 }
 ```
 
-### 5.5 `POST /voice/commands/execute`
+### 5.6 `POST /voice/commands/execute`
 
 请求体：
 
