@@ -6,7 +6,6 @@ import {
   getEventsForMonth,
   getEventsForWeek,
   getPriorityColor,
-  mockEvents,
 } from '../data/mock'
 import type { Event } from '../data/mock'
 
@@ -142,15 +141,17 @@ function EventCard({
 
 export function DayView({
   date,
+  events,
   onEventClick,
 }: {
   date: Date
+  events: Event[]
   onEventClick: (event: Event) => void
 }) {
-  const events = useMemo(() => getEventsForDate(date), [date])
+  const dayEvents = useMemo(() => getEventsForDate(events, date), [events, date])
 
   const eventPositions = useMemo(() => {
-    const sorted = [...events].sort((a, b) => a.startTime.getTime() - b.startTime.getTime())
+    const sorted = [...dayEvents].sort((a, b) => a.startTime.getTime() - b.startTime.getTime())
     return sorted.map((event) => {
       const startHour = event.startTime.getHours() + event.startTime.getMinutes() / 60
       const endHour = event.endTime
@@ -160,7 +161,7 @@ export function DayView({
       const height = Math.max((endHour - startHour) * 64 - 2, 28)
       return { event, top, height }
     })
-  }, [events])
+  }, [dayEvents])
 
   return (
     <div className="flex h-full flex-col">
@@ -220,9 +221,11 @@ export function DayView({
 
 export function WeekView({
   weekStart,
+  events,
   onEventClick,
 }: {
   weekStart: Date
+  events: Event[]
   onEventClick: (event: Event) => void
 }) {
   const days = useMemo(() => {
@@ -235,7 +238,7 @@ export function WeekView({
     return result
   }, [weekStart])
 
-  const allEvents = useMemo(() => getEventsForWeek(weekStart), [weekStart])
+  const allEvents = useMemo(() => getEventsForWeek(events, weekStart), [events, weekStart])
 
   const eventsByDay = useMemo(() => {
     const map: Record<number, Event[]> = {}
@@ -352,14 +355,16 @@ export function WeekView({
 export function MonthView({
   year,
   month,
+  events,
   onEventClick,
 }: {
   year: number
   month: number
+  events: Event[]
   onEventClick: (event: Event) => void
 }) {
   const gridDays = useMemo(() => getMonthGrid(year, month), [year, month])
-  const monthEvents = useMemo(() => getEventsForMonth(year, month), [year, month])
+  const monthEvents = useMemo(() => getEventsForMonth(events, year, month), [events, year, month])
 
   const eventsByDay = useMemo(() => {
     const map: Record<string, Event[]> = {}
@@ -449,10 +454,16 @@ export function MonthView({
 
 // ─── List View ───
 
-export function ListView({ onEventClick }: { onEventClick: (event: Event) => void }) {
+export function ListView({
+  events,
+  onEventClick,
+}: {
+  events: Event[]
+  onEventClick: (event: Event) => void
+}) {
   const sortedEvents = useMemo(() => {
-    return [...mockEvents].sort((a, b) => a.startTime.getTime() - b.startTime.getTime())
-  }, [])
+    return [...events].sort((a, b) => a.startTime.getTime() - b.startTime.getTime())
+  }, [events])
 
   const groupedEvents = useMemo(() => {
     const groups: Record<string, Event[]> = {}
@@ -506,29 +517,32 @@ export type CalendarViewType = 'day' | 'week' | 'month' | 'list'
 export function CalendarContainer({
   view,
   currentDate,
+  events,
   onEventClick,
 }: {
   view: CalendarViewType
   currentDate: Date
+  events: Event[]
   onEventClick: (event: Event) => void
 }) {
   switch (view) {
     case 'day':
-      return <DayView date={currentDate} onEventClick={onEventClick} />
+      return <DayView date={currentDate} events={events} onEventClick={onEventClick} />
     case 'week': {
       const weekStart = getWeekStart(currentDate)
-      return <WeekView onEventClick={onEventClick} weekStart={weekStart} />
+      return <WeekView events={events} onEventClick={onEventClick} weekStart={weekStart} />
     }
     case 'month':
       return (
         <MonthView
+          events={events}
           month={currentDate.getMonth()}
           onEventClick={onEventClick}
           year={currentDate.getFullYear()}
         />
       )
     case 'list':
-      return <ListView onEventClick={onEventClick} />
+      return <ListView events={events} onEventClick={onEventClick} />
     default:
       return null
   }

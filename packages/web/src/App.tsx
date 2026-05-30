@@ -31,7 +31,7 @@ import {
 import { CreateEventModal, EventModal } from './components/EventModal'
 import { VoiceModal } from './components/VoiceModal'
 import { getEventsForDate, mockEvents, mockNotifications, mockUser } from './data/mock'
-import type { Event } from './data/mock'
+import type { Event, Reminder } from './data/mock'
 
 type Page = 'calendar' | 'voice' | 'settings'
 
@@ -103,9 +103,11 @@ function NotificationPanel({
 
 function MiniCalendar({
   currentDate,
+  events,
   onSelectDate,
 }: {
   currentDate: Date
+  events: Event[]
   onSelectDate: (date: Date) => void
 }) {
   const [displayMonth, setDisplayMonth] = useState(() => {
@@ -179,7 +181,7 @@ function MiniCalendar({
             date.getDate() === currentDate.getDate() &&
             date.getMonth() === currentDate.getMonth() &&
             date.getFullYear() === currentDate.getFullYear()
-          const hasEvents = getEventsForDate(date).length > 0
+          const hasEvents = getEventsForDate(events, date).length > 0
 
           return (
             <button
@@ -212,8 +214,14 @@ function MiniCalendar({
 
 // ─── Upcoming Events Sidebar ───
 
-function UpcomingEvents({ onEventClick }: { onEventClick: (e: Event) => void }) {
-  const upcoming = mockEvents
+function UpcomingEvents({
+  events,
+  onEventClick,
+}: {
+  events: Event[]
+  onEventClick: (e: Event) => void
+}) {
+  const upcoming = events
     .filter((e) => e.startTime >= new Date())
     .sort((a, b) => a.startTime.getTime() - b.startTime.getTime())
     .slice(0, 5)
@@ -601,7 +609,8 @@ function App() {
   const [page, setPage] = useState<Page>('calendar')
   const [calendarView, setCalendarView] = useState<CalendarViewType>('week')
   const [currentDate, setCurrentDate] = useState(() => getTodayStart())
-  const [selectedEvent, setSelectedEvent] = useState<Event | null>(null)
+  const [events, setEvents] = useState<Event[]>(mockEvents)
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showVoiceModal, setShowVoiceModal] = useState(false)
   const [showNotifPanel, setShowNotifPanel] = useState(false)
@@ -615,6 +624,10 @@ function App() {
     return Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, parsed))
   })
   const [isResizingSidebar, setIsResizingSidebar] = useState(false)
+
+  const selectedEvent = selectedEventId
+    ? (events.find((e) => e.id === selectedEventId) ?? null)
+    : null
 
   useEffect(() => {
     try {
@@ -635,12 +648,57 @@ function App() {
   }
 
   function handleEventClick(event: Event) {
-    setSelectedEvent(event)
+    setSelectedEventId(event.id)
   }
 
   function navigateToPage(p: Page) {
     setPage(p)
     setIsMobileNavOpen(false)
+  }
+
+  function createEvent(input: {
+    title: string
+    description?: string
+    startTime: Date
+    endTime?: Date
+    location?: string
+    priority: 'low' | 'normal' | 'high'
+    allDay?: boolean
+    tags?: string[]
+  }) {
+    const now = new Date()
+    const id = `event-${now.getTime().toString(36)}-${Math.random().toString(36).slice(2, 6)}`
+    const reminders: Reminder[] = [
+      { id: `${id}-r1`, eventId: id, minutesBefore: 15, method: 'push' },
+    ]
+    const newEvent: Event = {
+      id,
+      title: input.title,
+      description: input.description,
+      startTime: input.startTime,
+      endTime: input.endTime,
+      allDay: input.allDay,
+      timezone: 'Asia/Shanghai',
+      location: input.location,
+      reminders,
+      priority: input.priority,
+      tags: input.tags,
+      source: 'manual',
+      createdAt: now,
+      updatedAt: now,
+    }
+    setEvents((arr) => [...arr, newEvent])
+  }
+
+  function updateEvent(id: string, patch: Partial<Event>) {
+    setEvents((arr) =>
+      arr.map((e) => (e.id === id ? { ...e, ...patch, updatedAt: new Date() } : e)),
+    )
+  }
+
+  function deleteEvent(id: string) {
+    setEvents((arr) => arr.filter((e) => e.id !== id))
+    setSelectedEventId((cur) => (cur === id ? null : cur))
   }
 
   function toggleNotifPanel() {
@@ -750,12 +808,13 @@ function App() {
           <div className="space-y-3 px-3 pb-3">
             <MiniCalendar
               currentDate={currentDate}
+              events={events}
               onSelectDate={(d) => {
                 setCurrentDate(d)
                 setCalendarView('day')
               }}
             />
-            <UpcomingEvents onEventClick={handleEventClick} />
+            <UpcomingEvents events={events} onEventClick={handleEventClick} />
           </div>
         )}
 
@@ -871,6 +930,7 @@ function App() {
               <div className="h-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
                 <CalendarContainer
                   currentDate={currentDate}
+                  events={events}
                   onEventClick={handleEventClick}
                   view={calendarView}
                 />
@@ -893,10 +953,24 @@ function App() {
       </main>
 
       {/* Modals */}
-      {selectedEvent && <EventModal event={selectedEvent} onClose={() => setSelectedEvent(null)} />}
+      {selectedEvent && (
+        <EventModal
+          event={selectedEvent}
+          onClose={() => setSelectedEventId(null)}
+          onDelete={() => deleteEvent(selectedEvent.id)}
+          onUpdate={(patch) => updateEvent(selectedEvent.id, patch)}
+        />
+      )}
 
       {showCreateModal && (
-        <CreateEventModal initialDate={currentDate} onClose={() => setShowCreateModal(false)} />
+        <CreateEventModal
+          initialDate={currentDate}
+          onClose={() => setShowCreateModal(false)}
+          onCreate={(input) => {
+            createEvent(input)
+            setShowCreateModal(false)
+          }}
+        />
       )}
 
       {showVoiceModal && <VoiceModal onClose={() => setShowVoiceModal(false)} />}

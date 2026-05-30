@@ -52,7 +52,19 @@ function formatReminder(reminder: Reminder): string {
   return `${reminder.minutesBefore === 0 ? '准时' : `提前${reminder.minutesBefore}分钟`} · ${methodMap[reminder.method]}`
 }
 
-export function EventModal({ event, onClose }: { event: Event; onClose: () => void }) {
+export function EventModal({
+  event,
+  onClose,
+  onUpdate,
+  onDelete,
+  onTagClick,
+}: {
+  event: Event
+  onClose: () => void
+  onUpdate?: (patch: Partial<Event>) => void
+  onDelete?: () => void
+  onTagClick?: (tag: string) => void
+}) {
   const [isEditing, setIsEditing] = useState(false)
   const [editForm, setEditForm] = useState({
     title: event.title,
@@ -62,7 +74,49 @@ export function EventModal({ event, onClose }: { event: Event; onClose: () => vo
     location: event.location || '',
     priority: event.priority,
     allDay: event.allDay || false,
+    tags: event.tags ?? [],
   })
+
+  function startEditing() {
+    setEditForm({
+      title: event.title,
+      description: event.description || '',
+      startTime: formatDateTimeInput(event.startTime),
+      endTime: event.endTime ? formatDateTimeInput(event.endTime) : '',
+      location: event.location || '',
+      priority: event.priority,
+      allDay: event.allDay || false,
+      tags: event.tags ?? [],
+    })
+    setIsEditing(true)
+  }
+
+  function handleSaveEdit() {
+    if (!onUpdate) {
+      setIsEditing(false)
+      return
+    }
+    const editEndBeforeStart = Boolean(
+      editForm.endTime && editForm.startTime && editForm.endTime < editForm.startTime,
+    )
+    if (!editForm.title.trim() || editEndBeforeStart) return
+    onUpdate({
+      title: editForm.title.trim(),
+      description: editForm.description.trim() || undefined,
+      startTime: new Date(editForm.startTime),
+      endTime: editForm.endTime ? new Date(editForm.endTime) : undefined,
+      allDay: editForm.allDay,
+      location: editForm.location.trim() || undefined,
+      priority: editForm.priority,
+      tags: editForm.tags.length > 0 ? editForm.tags : undefined,
+    })
+    setIsEditing(false)
+  }
+
+  const editEndBeforeStart = Boolean(
+    editForm.endTime && editForm.startTime && editForm.endTime < editForm.startTime,
+  )
+  const canSaveEdit = Boolean(editForm.title.trim()) && !editEndBeforeStart
 
   const priorityLabels: Record<string, string> = {
     high: '紧急',
@@ -204,10 +258,9 @@ export function EventModal({ event, onClose }: { event: Event; onClose: () => vo
               取消
             </button>
             <button
-              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-teal-700"
-              onClick={() => {
-                setIsEditing(false)
-              }}
+              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-teal-700 disabled:bg-slate-300"
+              disabled={!canSaveEdit}
+              onClick={handleSaveEdit}
               type="button"
             >
               保存更改
@@ -248,7 +301,7 @@ export function EventModal({ event, onClose }: { event: Event; onClose: () => vo
               <button
                 aria-label="编辑"
                 className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 transition hover:bg-white/60 hover:text-slate-700"
-                onClick={() => setIsEditing(true)}
+                onClick={startEditing}
                 type="button"
               >
                 <Pencil size={16} />
@@ -256,6 +309,13 @@ export function EventModal({ event, onClose }: { event: Event; onClose: () => vo
               <button
                 aria-label="删除"
                 className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 transition hover:bg-white/60 hover:text-rose-600"
+                onClick={() => {
+                  if (!onDelete) return
+                  if (window.confirm(`确定要删除事件「${event.title}」吗？此操作无法撤销。`)) {
+                    onDelete()
+                    onClose()
+                  }
+                }}
                 type="button"
               >
                 <Trash2 size={16} />
@@ -384,9 +444,20 @@ export function EventModal({ event, onClose }: { event: Event; onClose: () => vo
 export function CreateEventModal({
   initialDate,
   onClose,
+  onCreate,
 }: {
   initialDate?: Date
   onClose: () => void
+  onCreate?: (input: {
+    title: string
+    description?: string
+    startTime: Date
+    endTime?: Date
+    location?: string
+    priority: 'low' | 'normal' | 'high'
+    allDay?: boolean
+    tags?: string[]
+  }) => void
 }) {
   const defaultDate = initialDate || new Date()
   const [form, setForm] = useState({
@@ -395,8 +466,9 @@ export function CreateEventModal({
     startTime: formatDateTimeInput(defaultDate),
     endTime: '',
     location: '',
-    priority: 'normal' as const,
+    priority: 'normal' as 'low' | 'normal' | 'high',
     allDay: false,
+    tags: [] as string[],
   })
 
   useEffect(() => {
@@ -409,6 +481,21 @@ export function CreateEventModal({
 
   const endBeforeStart = Boolean(form.endTime && form.startTime && form.endTime < form.startTime)
   const canSubmit = Boolean(form.title.trim()) && !endBeforeStart
+
+  function handleSubmit() {
+    if (!canSubmit) return
+    onCreate?.({
+      title: form.title.trim(),
+      description: form.description.trim() || undefined,
+      startTime: new Date(form.startTime),
+      endTime: form.endTime ? new Date(form.endTime) : undefined,
+      location: form.location.trim() || undefined,
+      priority: form.priority,
+      allDay: form.allDay,
+      tags: form.tags.length > 0 ? form.tags : undefined,
+    })
+    if (!onCreate) onClose()
+  }
 
   return (
     <div
@@ -580,7 +667,7 @@ export function CreateEventModal({
           <button
             className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-teal-700 disabled:bg-slate-300"
             disabled={!canSubmit}
-            onClick={onClose}
+            onClick={handleSubmit}
             type="button"
           >
             创建事件
