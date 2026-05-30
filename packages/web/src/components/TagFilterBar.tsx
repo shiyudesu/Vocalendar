@@ -1,3 +1,4 @@
+import { Crosshair } from 'lucide-react'
 import { useMemo } from 'react'
 
 import { getTagPalette } from '../lib/tagPalette'
@@ -6,13 +7,23 @@ interface TagFilterBarProps {
   allTags: string[]
   hiddenTags: Set<string>
   onToggle: (tag: string) => void
+  onFocus: (tag: string) => void
   onClear: () => void
 }
 
 // A horizontal scrollable list of tag chips above the calendar.
-// Each chip toggles visibility of events with that tag. Untagged events are
-// never affected by this bar (always visible) so we don't add an "untagged" chip.
-export function TagFilterBar({ allTags, hiddenTags, onToggle, onClear }: TagFilterBarProps) {
+// Each chip has two actions:
+//   - click the body → toggle visibility (hide/show)
+//   - click the small crosshair on the right → focus mode (hide all others)
+// Untagged events are never affected by this bar (always visible) so we don't
+// add an "untagged" chip.
+export function TagFilterBar({
+  allTags,
+  hiddenTags,
+  onToggle,
+  onFocus,
+  onClear,
+}: TagFilterBarProps) {
   const sorted = useMemo(() => [...allTags].sort((a, b) => a.localeCompare(b, 'zh-CN')), [allTags])
   const hiddenCount = useMemo(
     () => sorted.filter((t) => hiddenTags.has(t)).length,
@@ -29,21 +40,38 @@ export function TagFilterBar({ allTags, hiddenTags, onToggle, onClear }: TagFilt
           const palette = getTagPalette(tag)
           const hidden = hiddenTags.has(tag)
           return (
-            <button
-              aria-label={hidden ? `显示标签「${tag}」` : `隐藏标签「${tag}」`}
-              aria-pressed={!hidden}
-              className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] transition ${
+            <span
+              className={`group inline-flex items-stretch overflow-hidden rounded-md border text-[11px] transition ${
                 hidden
-                  ? 'border-slate-200 bg-white text-slate-400 line-through opacity-60 hover:opacity-90'
+                  ? 'border-slate-200 bg-white text-slate-400 opacity-60 hover:opacity-90'
                   : `${palette.chipActiveBg} ${palette.chipActiveText} ${palette.chipActiveBorder}`
               }`}
               key={tag}
-              onClick={() => onToggle(tag)}
-              type="button"
             >
-              <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${palette.dot}`} />
-              {tag}
-            </button>
+              <button
+                aria-label={hidden ? `显示标签「${tag}」` : `隐藏标签「${tag}」`}
+                aria-pressed={!hidden}
+                className={`inline-flex items-center gap-1 px-2 py-0.5 ${hidden ? 'line-through' : ''}`}
+                onClick={() => onToggle(tag)}
+                type="button"
+              >
+                <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${palette.dot}`} />
+                {tag}
+              </button>
+              <button
+                aria-label={`仅显示标签「${tag}」`}
+                className={`inline-flex items-center border-l px-1.5 transition ${
+                  hidden
+                    ? 'border-slate-200 hover:bg-slate-50 hover:text-slate-600'
+                    : `${palette.chipActiveBorder} hover:bg-white/40`
+                }`}
+                onClick={() => onFocus(tag)}
+                title="只看此标签"
+                type="button"
+              >
+                <Crosshair size={10} />
+              </button>
+            </span>
           )
         })}
       </div>

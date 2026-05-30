@@ -909,7 +909,7 @@ function App() {
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 space-y-0.5 px-3">
+        <nav className="space-y-1.5 px-3">
           {[
             { id: 'calendar' as Page, label: '日历', icon: CalendarDays },
             { id: 'voice' as Page, label: '语音助手', icon: Mic },
@@ -945,7 +945,7 @@ function App() {
         )}
 
         {/* User */}
-        <div className="border-t border-slate-100 p-3">
+        <div className="mt-auto border-t border-slate-100 p-3">
           <div className="flex items-center gap-2 rounded-lg px-2 py-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-teal-100 text-xs font-bold text-teal-700">
               {mockUser.name[0]}
@@ -1054,6 +1054,7 @@ function App() {
             allTags={tagSuggestions}
             hiddenTags={sanitizedHiddenTags}
             onClear={clearTagFilter}
+            onFocus={focusOnTag}
             onToggle={toggleTagVisibility}
           />
         )}

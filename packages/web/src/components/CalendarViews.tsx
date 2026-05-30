@@ -154,8 +154,8 @@ export function DayView({
       const endHour = event.endTime
         ? event.endTime.getHours() + event.endTime.getMinutes() / 60
         : startHour + 1
-      const top = startHour * 64
-      const height = Math.max((endHour - startHour) * 64 - 2, 28)
+      const top = startHour * 64 + 2
+      const height = Math.max((endHour - startHour) * 64 - 6, 24)
       return { event, top, height }
     })
   }, [dayEvents])
@@ -310,8 +310,8 @@ export function WeekView({
               const endHour = event.endTime
                 ? event.endTime.getHours() + event.endTime.getMinutes() / 60
                 : startHour + 1
-              const top = startHour * 64
-              const height = Math.max((endHour - startHour) * 64 - 2, 28)
+              const top = startHour * 64 + 2
+              const height = Math.max((endHour - startHour) * 64 - 6, 24)
               return { event, top, height }
             })
 
