@@ -37,15 +37,19 @@ export function createAssistantService(dependencies: AssistantServiceDependencie
           const actionType = mapToolNameToActionType(tc.function.name)
 
           if (actionType === 'create') {
+            const startAt =
+              typeof args.startAt === 'string' && args.startAt.length > 0 ? args.startAt : null
+            const rawEndAt =
+              typeof args.endAt === 'string' && args.endAt.length > 0 ? args.endAt : null
+            const endAt = sanitizeEndAt(startAt, rawEndAt)
             return {
               id: `act_${index + 1}`,
               type: 'create' as const,
               status: 'pending' as const,
               eventDraft: {
                 title: typeof args.title === 'string' && args.title.length > 0 ? args.title : null,
-                startAt:
-                  typeof args.startAt === 'string' && args.startAt.length > 0 ? args.startAt : null,
-                endAt: typeof args.endAt === 'string' && args.endAt.length > 0 ? args.endAt : null,
+                startAt,
+                endAt,
                 timezone: typeof args.timezone === 'string' ? args.timezone : request.timezone,
                 location:
                   typeof args.location === 'string' && args.location.length > 0
@@ -189,4 +193,28 @@ function typeToLabel(type: AssistantAction['type']): string {
     clarify: '补问',
   }
   return map[type] ?? type
+}
+
+// Guard against LLM-hallucinated endAt values. MiMo v2.5 in particular often
+// invents a default end time (e.g. startAt + 5 min, or some fixed value like
+// "12:30") for instant / reminder-style events. Strip endAt when it's clearly
+// nonsensical so the calendar shows the event as a point-in-time reminder.
+const MIN_DURATION_MS = 60 * 1000 // 1 minute — anything shorter is hallucination
+const MAX_DURATION_MS = 12 * 60 * 60 * 1000 // 12 hours — single-day cap for free-form events
+
+function sanitizeEndAt(startAt: string | null, endAt: string | null): string | null {
+  if (!endAt) return null
+  if (!startAt) return null
+
+  const start = Date.parse(startAt)
+  const end = Date.parse(endAt)
+
+  if (Number.isNaN(start) || Number.isNaN(end)) return null
+  if (end <= start) return null
+
+  const duration = end - start
+  if (duration < MIN_DURATION_MS) return null
+  if (duration > MAX_DURATION_MS) return null
+
+  return endAt
 }
