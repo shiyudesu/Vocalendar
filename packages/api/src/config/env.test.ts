@@ -47,4 +47,52 @@ describe('loadApiEnv', () => {
       }),
     ).toThrowError(/JWT_REFRESH_SECRET/i)
   })
+
+  test('parses redis config from REDIS_HOST, REDIS_PORT, and REDIS_PASSWORD', () => {
+    const env = loadApiEnv({
+      DATABASE_URL: 'postgresql://vocalendar:vocalendar@127.0.0.1:5432/vocalendar',
+      REDIS_HOST: 'remote.redis.host',
+      REDIS_PORT: '6380',
+      REDIS_PASSWORD: 'my!secret',
+      JWT_ACCESS_SECRET: 'replace-with-a-long-random-access-secret',
+      JWT_REFRESH_SECRET: 'replace-with-a-long-random-refresh-secret',
+      ALIYUN_ACCESS_KEY_ID: 'akid',
+      ALIYUN_ACCESS_KEY_SECRET: 'aksecret',
+      ALIYUN_NLS_APP_KEY: 'appkey',
+    })
+
+    expect(env.redis.url).toBeUndefined()
+    expect(env.redis.host).toBe('remote.redis.host')
+    expect(env.redis.port).toBe(6380)
+    expect(env.redis.password).toBe('my!secret')
+  })
+
+  test('uses default port 6379 when REDIS_PORT is omitted', () => {
+    const env = loadApiEnv({
+      DATABASE_URL: 'postgresql://vocalendar:vocalendar@127.0.0.1:5432/vocalendar',
+      REDIS_HOST: 'remote.redis.host',
+      JWT_ACCESS_SECRET: 'replace-with-a-long-random-access-secret',
+      JWT_REFRESH_SECRET: 'replace-with-a-long-random-refresh-secret',
+      ALIYUN_ACCESS_KEY_ID: 'akid',
+      ALIYUN_ACCESS_KEY_SECRET: 'aksecret',
+      ALIYUN_NLS_APP_KEY: 'appkey',
+    })
+
+    expect(env.redis.host).toBe('remote.redis.host')
+    expect(env.redis.port).toBe(6379)
+    expect(env.redis.password).toBeUndefined()
+  })
+
+  test('rejects when neither REDIS_URL nor REDIS_HOST is provided', () => {
+    expect(() =>
+      loadApiEnv({
+        DATABASE_URL: 'postgresql://vocalendar:vocalendar@127.0.0.1:5432/vocalendar',
+        JWT_ACCESS_SECRET: 'replace-with-a-long-random-access-secret',
+        JWT_REFRESH_SECRET: 'replace-with-a-long-random-refresh-secret',
+        ALIYUN_ACCESS_KEY_ID: 'akid',
+        ALIYUN_ACCESS_KEY_SECRET: 'aksecret',
+        ALIYUN_NLS_APP_KEY: 'appkey',
+      }),
+    ).toThrowError(/Either REDIS_URL or REDIS_HOST is required/i)
+  })
 })

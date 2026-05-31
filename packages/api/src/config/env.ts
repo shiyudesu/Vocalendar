@@ -5,7 +5,10 @@ export type ApiEnv = {
     url: string
   }
   redis: {
-    url: string
+    url?: string
+    host?: string
+    port?: number
+    password?: string
   }
   jwt: {
     accessSecret: string
@@ -51,7 +54,7 @@ export function loadApiEnv(source: EnvSource): ApiEnv {
   const port = readPort(source.PORT, errors)
   const nodeEnv = readNodeEnv(source.NODE_ENV, errors)
   const databaseUrl = readUrl('DATABASE_URL', source.DATABASE_URL, errors)
-  const redisUrl = readUrl('REDIS_URL', source.REDIS_URL, errors)
+  const redisConfig = readRedisConfig(source, errors)
   const jwtAccessSecret = readRequiredString('JWT_ACCESS_SECRET', source.JWT_ACCESS_SECRET, errors)
   const jwtRefreshSecret = readRequiredString(
     'JWT_REFRESH_SECRET',
@@ -90,9 +93,7 @@ export function loadApiEnv(source: EnvSource): ApiEnv {
     database: {
       url: databaseUrl,
     },
-    redis: {
-      url: redisUrl,
-    },
+    redis: redisConfig,
     jwt: {
       accessSecret: jwtAccessSecret,
       refreshSecret: jwtRefreshSecret,
@@ -172,6 +173,40 @@ function readUrl(name: string, value: string | undefined, errors: string[]) {
   } catch {
     errors.push(`${name} must be a valid URL`)
     return normalized
+  }
+}
+
+function readRedisConfig(source: EnvSource, errors: string[]) {
+  const redisUrl = source.REDIS_URL?.trim()
+
+  if (redisUrl) {
+    try {
+      const url = new URL(redisUrl)
+      return { url: url.toString() }
+    } catch {
+      errors.push('REDIS_URL must be a valid URL')
+      return { url: redisUrl }
+    }
+  }
+
+  const host = source.REDIS_HOST?.trim()
+
+  if (!host) {
+    errors.push('Either REDIS_URL or REDIS_HOST is required')
+    return {}
+  }
+
+  const portStr = source.REDIS_PORT?.trim()
+  const port = portStr ? Number(portStr) : 6379
+
+  if (!Number.isInteger(port) || port <= 0) {
+    errors.push('REDIS_PORT must be a positive integer')
+  }
+
+  return {
+    host,
+    port,
+    password: source.REDIS_PASSWORD?.trim(),
   }
 }
 

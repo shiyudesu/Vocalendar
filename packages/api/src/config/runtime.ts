@@ -159,23 +159,32 @@ function createDatabaseRuntime(env: ApiEnv): DatabaseRuntime {
 }
 
 function createRedisRuntime(env: ApiEnv): RedisRuntime {
-  const client = createClient({
-    url: env.redis.url,
-    socket: {
-      reconnectStrategy: false,
-      connectTimeout: 250,
-    },
-  })
-  const subscriber = createClient({
-    url: env.redis.url,
-    socket: {
-      reconnectStrategy: false,
-      connectTimeout: 250,
-    },
-  })
+  const socketConfig = {
+    reconnectStrategy: false as const,
+    connectTimeout: 250,
+  }
+
+  let clientOptions
+  let displayUrl: string
+
+  if (env.redis.url) {
+    clientOptions = { url: env.redis.url, socket: socketConfig }
+    displayUrl = env.redis.url
+  } else if (env.redis.host && env.redis.port) {
+    clientOptions = {
+      socket: { ...socketConfig, host: env.redis.host, port: env.redis.port },
+      password: env.redis.password,
+    }
+    displayUrl = `redis://${env.redis.host}:${env.redis.port}`
+  } else {
+    throw new Error('Redis configuration is missing: either url or host/port must be provided')
+  }
+
+  const client = createClient(clientOptions)
+  const subscriber = createClient(clientOptions)
 
   return {
-    url: env.redis.url,
+    url: displayUrl,
     client,
     subscriber,
     async close() {
