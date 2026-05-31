@@ -4,6 +4,7 @@ import { createClient } from 'redis'
 import { runPendingSqlMigrations } from '../db/migrator.js'
 import { listSqlMigrationFiles, type SqlMigrationFile } from '../db/migrator.js'
 import { createDeepSeekProvider } from '../integrations/llm/deepseek-provider.js'
+import { createMiMoProvider } from '../integrations/llm/mimo-provider.js'
 import type { LlmProvider } from '../integrations/llm/types.js'
 import { createAliyunVoiceProvider } from '../integrations/voice/aliyun-provider.js'
 import { mockVoiceProvider } from '../integrations/voice/mock-provider.js'
@@ -123,12 +124,7 @@ export async function createRuntimeDependencies(source: EnvSource): Promise<Runt
     voice: env.voice.aliyun.accessKeyId.includes('your-')
       ? mockVoiceProvider
       : createAliyunVoiceProvider(env.voice.aliyun),
-    llm: createDeepSeekProvider({
-      apiKey: env.llm.deepseek.apiKey,
-      baseUrl: env.llm.deepseek.baseUrl,
-      model: env.llm.deepseek.model,
-      timeoutMs: env.llm.deepseek.timeoutMs,
-    }),
+    llm: createLlmProvider(env),
     reminders,
     tokens,
     migrations,
@@ -234,4 +230,25 @@ function requiredRedisSubscriber(client: RedisClientLike) {
     subscribe: client.subscribe.bind(client),
     unsubscribe: client.unsubscribe.bind(client),
   }
+}
+
+// Pick the active LLM provider based on which API key is configured.
+// MiMo takes precedence when its key is set, so swapping vendors is a pure
+// .env change. Falls back to DeepSeek for backward compatibility.
+function createLlmProvider(env: ApiEnv): LlmProvider {
+  if (env.llm.mimo.apiKey) {
+    return createMiMoProvider({
+      apiKey: env.llm.mimo.apiKey,
+      baseUrl: env.llm.mimo.baseUrl,
+      model: env.llm.mimo.model,
+      timeoutMs: env.llm.mimo.timeoutMs,
+    })
+  }
+
+  return createDeepSeekProvider({
+    apiKey: env.llm.deepseek.apiKey,
+    baseUrl: env.llm.deepseek.baseUrl,
+    model: env.llm.deepseek.model,
+    timeoutMs: env.llm.deepseek.timeoutMs,
+  })
 }

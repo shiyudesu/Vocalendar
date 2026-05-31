@@ -30,6 +30,12 @@ export type ApiEnv = {
     }
   }
   llm: {
+    mimo: {
+      apiKey: string
+      baseUrl: string
+      model: string
+      timeoutMs: number
+    }
     deepseek: {
       apiKey: string
       baseUrl: string
@@ -58,6 +64,9 @@ const DEFAULT_EXPORT_TEMP_DIR = '/tmp/vocalendar-export'
 const DEFAULT_DEEPSEEK_BASE_URL = 'https://api.deepseek.com'
 const DEFAULT_DEEPSEEK_MODEL = 'deepseek-chat'
 const DEFAULT_DEEPSEEK_TIMEOUT_MS = 15000
+const DEFAULT_MIMO_BASE_URL = 'https://api.xiaomimimo.com/v1'
+const DEFAULT_MIMO_MODEL = 'mimo-v2-flash'
+const DEFAULT_MIMO_TIMEOUT_MS = 15000
 
 export function loadApiEnv(source: EnvSource): ApiEnv {
   const errors: string[] = []
@@ -125,6 +134,15 @@ export function loadApiEnv(source: EnvSource): ApiEnv {
       },
     },
     llm: {
+      mimo: {
+        apiKey: source.MIMO_API_KEY?.trim() || '',
+        baseUrl: source.MIMO_BASE_URL?.trim() || DEFAULT_MIMO_BASE_URL,
+        model: source.MIMO_MODEL?.trim() || DEFAULT_MIMO_MODEL,
+        timeoutMs: readPositiveIntegerWithDefault(
+          source.MIMO_TIMEOUT_MS,
+          DEFAULT_MIMO_TIMEOUT_MS,
+        ),
+      },
       deepseek: {
         apiKey: source.DEEPSEEK_API_KEY?.trim() || '',
         baseUrl: source.DEEPSEEK_BASE_URL?.trim() || DEFAULT_DEEPSEEK_BASE_URL,
