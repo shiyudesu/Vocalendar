@@ -7,6 +7,7 @@ import { realtimeMemoryRepository } from '../repositories/realtime.memory.js'
 import { userMemoryRepository } from '../repositories/users.memory.js'
 import { requireAuth } from './middleware/auth.js'
 import { corsMiddleware } from './middleware/cors.js'
+import { createAssistantRoutes } from './routes/assistant.js'
 import { createAuthRoutes } from './routes/auth.js'
 import { createDraftRoutes } from './routes/drafts.js'
 import { createEventRoutes } from './routes/events.js'
@@ -59,6 +60,9 @@ export function createApp(_options: CreateAppOptions = {}) {
     app.route('/v1/me', createMeRoutes(runtime))
     app.route('/v1/me/export', createExportRoutes(runtime))
     app.route('/v1/voice', createVoiceRoutes(runtime))
+    app.use('/v1/assistant/*', requireAuth(runtime))
+    app.use('/v1/assistant', requireAuth(runtime))
+    app.route('/v1/assistant', createAssistantRoutes(runtime))
     return app
   }
 

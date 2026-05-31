@@ -31,6 +31,70 @@ export type CreateEventFromDraftResult =
       missingFields: string[]
     }
 
+export type CreateEventDirectlyInput = {
+  title: string
+  startTime: string
+  endTime: string | null
+  timezone: string
+  location: string | null
+  source: 'text' | 'voice'
+}
+
+export async function createEventDirectly(
+  input: CreateEventDirectlyInput,
+  dependencies: EventDependencies,
+  userId?: string | null,
+): Promise<{ ok: true; event: EventRecord }> {
+  const timestamp = nowIso()
+  const eventId = `evt_${crypto.randomUUID()}`
+
+  const user = userId ? await dependencies.usersRepository.findUserById(userId) : null
+
+  const event: EventRecord = {
+    id: eventId,
+    userId: userId ?? 'usr_dev',
+    title: input.title,
+    description: null,
+    startTime: input.startTime,
+    endTime: input.endTime,
+    allDay: false,
+    timezone: input.timezone,
+    location: input.location,
+    recurrence: null,
+    reminders: [
+      {
+        id: `rem_${crypto.randomUUID()}`,
+        eventId,
+        minutesBefore: user?.settings.defaultReminderMinutes ?? 15,
+        method: 'push',
+        sentAt: null,
+      },
+    ],
+    attendees: [],
+    priority: 'normal',
+    tags: [],
+    source: input.source === 'voice' ? 'voice' : 'manual',
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  }
+
+  const saved = await dependencies.eventsRepository.saveEvent(event)
+
+  await dependencies.realtimeRepository.push(
+    {
+      type: 'event.created',
+      payload: { eventId: saved.id },
+      createdAt: nowIso(),
+    },
+    saved.userId,
+  )
+
+  return {
+    ok: true,
+    event: saved,
+  }
+}
+
 export async function createEventFromDraft(
   draftId: string,
   dependencies: EventDependencies,

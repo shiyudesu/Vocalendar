@@ -70,9 +70,19 @@ export const createDraftRequestSchema = z.object({
   source: eventSourceSchema.default('text'),
 })
 
-export const createEventRequestSchema = z.object({
-  draftId: z.string().min(1),
-})
+export const createEventRequestSchema = z.union([
+  z.object({
+    draftId: z.string().min(1),
+  }),
+  z.object({
+    title: z.string().min(1),
+    startTime: z.string().datetime(),
+    endTime: z.string().datetime().nullable().optional(),
+    timezone: timezoneSchema,
+    location: z.string().min(1).nullable().optional(),
+    source: eventSourceSchema.default('voice'),
+  }),
+])
 
 export const updateDraftFieldsSchema = z
   .object({

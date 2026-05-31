@@ -41,6 +41,10 @@
   - 时间冲突检测
   - 历史习惯推荐时长 / 提醒
   - 地点相关出发建议
+- 对话式语音助手（LLM 驱动）
+  - `POST /assistant/chat` 统一对话入口
+  - DeepSeek LLM 做意图识别 + 槽位提取 + 事件拆分
+  - 返回结构化操作列表（创建/更新/删除/查询/补问）
 - 快捷指令
   - “我到家了”
   - “会议延期 15 分钟”
@@ -128,6 +132,7 @@
 | `#23` | `POST /intelligence/conflicts` | V1.5 | Parser | ⏳ 待开始 |
 | `#24` | `POST /intelligence/suggestions` | V1.5 | Parser / 历史数据 | ⏳ 待开始 |
 | `#25` | `POST /voice/commands/execute` | V1.5 | Parser | ⏳ 待开始 |
+| `#28` | `POST /assistant/chat` 对话式助手 + DeepSeek LLM | V1.0 | DeepSeek API | ✅ 已实现 |
 | `#26` | `GET /realtime/ws` 实时同步 | V1.0 | Redis / 推送层 | 🟡 待 live 验证 |
 | `#27` | `/sync/bootstrap` + `/sync/mutations` | V2.0 | Mobile / 仓储 | ⏳ 待开始 |
 

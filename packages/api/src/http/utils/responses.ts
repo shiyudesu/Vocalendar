@@ -105,3 +105,20 @@ export function draftMissingFields(c: Context, details: unknown) {
     422,
   )
 }
+
+export function llmUnavailable(c: Context, message: string) {
+  return c.json(
+    {
+      error: {
+        code: 'LLM_UNAVAILABLE',
+        message,
+        details: null,
+      },
+      meta: {
+        requestId: c.req.header('x-request-id') ?? 'dev-request',
+        timestamp: nowIso(),
+      },
+    },
+    503,
+  )
+}

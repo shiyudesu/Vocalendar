@@ -1,5 +1,6 @@
 import type {
   CreateDraftRequest,
+  CreateEventRequest,
   EventRecord,
   NotificationRecord,
   UpdateDraftRequest,
@@ -109,6 +110,7 @@ export interface ListVoiceHistoryResponse {
 
 export type {
   CreateDraftRequest,
+  CreateEventRequest,
   EventRecord,
   NotificationRecord,
   UpdateDraftRequest,

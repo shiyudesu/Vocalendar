@@ -1,9 +1,12 @@
+import type { AssistantChatRequest, AssistantChatResponse } from '@vocalendar/schemas'
+
 import type {
   ApiErrorResponse,
   ApiSuccessResponse,
   ApiTransport,
   AuthSessionResponse,
   CreateDraftRequest,
+  CreateEventRequest,
   CreateTtsRequest,
   CreateTtsResponse,
   EventRecord,
@@ -166,6 +169,17 @@ export class ApiClient {
     })
   }
 
+  async createEvent(input: CreateEventRequest) {
+    const payload = await this.request<{ event: EventRecord }>('/api/v1/events', {
+      method: 'POST',
+      body: JSON.stringify(input),
+      headers: {
+        'content-type': 'application/json',
+      },
+    })
+    return payload.event
+  }
+
   async createDraft(input: CreateDraftRequest) {
     const payload = await this.request<{ draft: V1EventDraftRecord }>('/api/v1/drafts', {
       method: 'POST',
@@ -231,6 +245,16 @@ export class ApiClient {
 
   async createTts(input: CreateTtsRequest) {
     return await this.request<CreateTtsResponse>('/api/v1/voice/tts', {
+      method: 'POST',
+      body: JSON.stringify(input),
+      headers: {
+        'content-type': 'application/json',
+      },
+    })
+  }
+
+  async sendAssistantMessage(input: AssistantChatRequest) {
+    return await this.request<AssistantChatResponse>('/api/v1/assistant/chat', {
       method: 'POST',
       body: JSON.stringify(input),
       headers: {
