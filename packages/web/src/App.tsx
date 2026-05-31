@@ -38,9 +38,9 @@ import {
   toUserModel,
 } from './lib/adapters'
 import { ApiClient, ApiClientError } from './lib/api-client'
-import type { RealtimeEnvelope, V1EventDraftRecord } from './lib/api-types'
+import type { RealtimeEnvelope, VoiceHistoryRecord, V1EventDraftRecord } from './lib/api-types'
 import { getEventsForDate } from './lib/calendar'
-import type { Event, NotificationItem, User, UserSettings } from './lib/models'
+import type { Event, NotificationItem, User, UserSettings, VoiceHistoryItem } from './lib/models'
 import { clearSession, loadSession, saveSession } from './lib/session'
 import { getAllTagNames } from './lib/tags'
 
@@ -114,6 +114,21 @@ function isRealtimeEvent(message: RealtimeEnvelope) {
     message.type === 'event.updated' ||
     message.type === 'event.deleted'
   )
+}
+
+function toVoiceHistoryModel(record: VoiceHistoryRecord): VoiceHistoryItem {
+  const text =
+    record.kind === 'asr'
+      ? String((record.resultSummary as { text?: string }).text ?? '')
+      : String((record.requestSummary as { text?: string }).text ?? '')
+  const result = record.kind === 'asr' ? '语音识别' : '语音播报'
+  return {
+    id: record.id,
+    text: text || '（无内容）',
+    result,
+    timestamp: new Date(record.createdAt),
+    status: 'success',
+  }
 }
 
 function NotificationPanel({
@@ -608,7 +623,14 @@ function ReadonlyField({ label, value }: { label: string; value: string }) {
   )
 }
 
-function VoicePage() {
+interface VoicePageProps {
+  accessToken: string | null
+  language: string
+  voiceHistory: VoiceHistoryItem[]
+  onTranscriptReady: (transcript: string) => void
+}
+
+function VoicePage({ accessToken, language, voiceHistory, onTranscriptReady }: VoicePageProps) {
   const [showVoiceModal, setShowVoiceModal] = useState(false)
 
   return (
@@ -621,14 +643,6 @@ function VoicePage() {
         <p className="mt-2 text-slate-500">用自然语言快速创建、查询和修改日程</p>
       </div>
 
-      <div className="mb-8 rounded-xl border border-amber-200 bg-amber-50 p-5 shadow-sm">
-        <h3 className="text-sm font-semibold text-amber-900">真实语音链路暂未接入</h3>
-        <p className="mt-2 text-sm leading-relaxed text-amber-800">
-          当前前端已接入真实登录、事件、通知和设置接口；浏览器录音、在线 ASR
-          与语音历史仍处于开发中。
-        </p>
-      </div>
-
       <button
         className="mx-auto mb-8 flex h-24 w-24 items-center justify-center rounded-full bg-slate-900 text-white shadow-xl shadow-slate-300 transition hover:scale-105 hover:bg-teal-700"
         onClick={() => setShowVoiceModal(true)}
@@ -638,25 +652,30 @@ function VoicePage() {
       </button>
 
       <div className="mb-8 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h3 className="mb-4 text-sm font-semibold text-slate-800">后续将支持</h3>
-        <div className="grid gap-3 sm:grid-cols-2">
-          {[
-            '浏览器录音后直连 /voice/asr',
-            '语音历史读取 /voice-history',
-            'provider 状态展示',
-            '语音创建与文本草稿统一确认',
-          ].map((item) => (
-            <div
-              className="rounded-lg border border-slate-100 bg-slate-50 p-3 text-sm text-slate-600"
-              key={item}
-            >
-              {item}
-            </div>
-          ))}
+        <h3 className="mb-4 text-sm font-semibold text-slate-800">最近语音记录</h3>
+        <div className="flex max-h-48 flex-col gap-2 overflow-y-auto">
+          {voiceHistory.length === 0 ? (
+            <p className="text-sm text-slate-400">暂无语音记录</p>
+          ) : (
+            voiceHistory.map((item) => (
+              <div className="rounded-lg border border-slate-100 bg-slate-50 p-3" key={item.id}>
+                <p className="text-sm text-slate-700">「{item.text}」</p>
+                <p className="mt-0.5 text-xs text-teal-600">{item.result}</p>
+              </div>
+            ))
+          )}
         </div>
       </div>
 
-      {showVoiceModal ? <VoiceModal onClose={() => setShowVoiceModal(false)} /> : null}
+      {showVoiceModal ? (
+        <VoiceModal
+          accessToken={accessToken}
+          language={language}
+          onClose={() => setShowVoiceModal(false)}
+          onTranscriptReady={onTranscriptReady}
+          voiceHistory={voiceHistory}
+        />
+      ) : null}
     </div>
   )
 }
@@ -706,6 +725,8 @@ function App() {
   const [bootPending, setBootPending] = useState(Boolean(sessionRef.current))
   const [eventsPending, setEventsPending] = useState(false)
   const [notificationsPending, setNotificationsPending] = useState(false)
+  const [voiceHistory, setVoiceHistory] = useState<VoiceHistoryItem[]>([])
+  const [pendingVoiceDraft, setPendingVoiceDraft] = useState<V1EventDraftRecord | null>(null)
   const [settingsSaving, setSettingsSaving] = useState(false)
   const [createPending, setCreatePending] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
@@ -805,6 +826,42 @@ function App() {
     }
   }, [currentUser])
 
+  const loadVoiceHistory = useCallback(async () => {
+    if (!currentUser) return
+
+    try {
+      const items = await clientRef.current.getVoiceHistory()
+      setVoiceHistory(items.map(toVoiceHistoryModel))
+    } catch (error) {
+      console.error(error)
+    }
+  }, [currentUser])
+
+  const playTts = useCallback(
+    async (text: string) => {
+      if (!currentUser?.settings.voiceFeedback) {
+        console.log('[TTS] skipped: voiceFeedback is disabled')
+        return
+      }
+      try {
+        console.log('[TTS] requesting:', text)
+        const tts = await clientRef.current.createTts({
+          text,
+          language: currentUser.settings.language,
+          voice: currentUser.settings.language.startsWith('zh') ? 'xiaoyun' : 'en-US-JennyNeural',
+          speed: currentUser.settings.voiceSpeed,
+        })
+        console.log('[TTS] received audio, duration:', tts.durationMs)
+        const audio = new Audio(tts.audioUrl)
+        await audio.play()
+        console.log('[TTS] playing')
+      } catch (error) {
+        console.error('[TTS] error:', error)
+      }
+    },
+    [currentUser],
+  )
+
   useEffect(() => {
     if (!sessionRef.current) {
       setBootPending(false)
@@ -856,7 +913,8 @@ function App() {
 
     void loadEvents(currentDate)
     void loadNotifications()
-  }, [currentUser, currentDate, loadEvents, loadNotifications])
+    void loadVoiceHistory()
+  }, [currentUser, currentDate, loadEvents, loadNotifications, loadVoiceHistory])
 
   useEffect(() => {
     if (!currentUser) return
@@ -884,6 +942,16 @@ function App() {
       }
     }
   }, [currentUser, currentDate, loadEvents, loadNotifications])
+
+  async function handleVoiceTranscript(sourceText: string) {
+    setShowVoiceModal(false)
+    const draft = await handleDraftSubmit({ sourceText, source: 'voice' })
+    if (draft) {
+      setPendingVoiceDraft(draft)
+      setShowCreateModal(true)
+    }
+    void loadVoiceHistory()
+  }
 
   async function persistSession(session: {
     accessToken: string
@@ -975,23 +1043,32 @@ function App() {
     sourceText?: string
     draftId?: string
     userInput?: string
+    source?: 'text' | 'voice'
   }): Promise<V1EventDraftRecord | null> {
     setCreatePending(true)
     setCreateError(null)
 
     try {
+      const source = input.source ?? 'text'
+
       if (input.sourceText) {
         const draft = await clientRef.current.createDraft({
           sourceText: input.sourceText,
-          source: 'text',
+          source,
           timezone: currentUser?.timezone ?? 'Asia/Shanghai',
           referenceAt: new Date().toISOString(),
         })
 
         if (draft.canSave) {
-          await clientRef.current.confirmDraft(draft.draftId)
+          const event = await clientRef.current.confirmDraft(draft.draftId)
           await loadEvents(currentDate)
           setShowCreateModal(false)
+
+          if (source === 'voice') {
+            await playTts(`已为您创建${event.title ? '「' + event.title + '」' : '日程安排'}`)
+            void loadVoiceHistory()
+          }
+
           return null
         }
 
@@ -1005,9 +1082,19 @@ function App() {
         })
 
         if (draft.canSave) {
-          await clientRef.current.confirmDraft(draft.draftId)
+          const event = await clientRef.current.confirmDraft(draft.draftId)
           await loadEvents(currentDate)
           setShowCreateModal(false)
+
+          const isVoiceFollowUp = pendingVoiceDraft?.draftId === input.draftId
+          if (source === 'voice' || isVoiceFollowUp) {
+            await playTts(`已为您创建${event.title ? '「' + event.title + '」' : '日程安排'}`)
+            void loadVoiceHistory()
+            if (isVoiceFollowUp) {
+              setPendingVoiceDraft(null)
+            }
+          }
+
           return null
         }
 
@@ -1386,7 +1473,12 @@ function App() {
 
           {page === 'voice' ? (
             <div className="h-full overflow-y-auto p-6">
-              <VoicePage />
+              <VoicePage
+                accessToken={sessionRef.current?.accessToken ?? null}
+                language={currentUser?.settings.language ?? 'zh-CN'}
+                onTranscriptReady={handleVoiceTranscript}
+                voiceHistory={voiceHistory}
+              />
             </div>
           ) : null}
 
@@ -1427,13 +1519,26 @@ function App() {
       {showCreateModal ? (
         <DraftComposerModal
           errorMessage={createError}
+          initialDraft={pendingVoiceDraft}
+          initialSourceText={pendingVoiceDraft?.sourceText ?? ''}
           isSubmitting={createPending}
-          onClose={() => setShowCreateModal(false)}
+          onClose={() => {
+            setPendingVoiceDraft(null)
+            setShowCreateModal(false)
+          }}
           onSubmit={handleDraftSubmit}
         />
       ) : null}
 
-      {showVoiceModal ? <VoiceModal onClose={() => setShowVoiceModal(false)} /> : null}
+      {showVoiceModal ? (
+        <VoiceModal
+          accessToken={sessionRef.current?.accessToken ?? null}
+          language={currentUser?.settings.language ?? 'zh-CN'}
+          onClose={() => setShowVoiceModal(false)}
+          onTranscriptReady={handleVoiceTranscript}
+          voiceHistory={voiceHistory}
+        />
+      ) : null}
 
       {showNotifPanel ? (
         <NotificationPanel notifications={notifications} onClose={() => setShowNotifPanel(false)} />

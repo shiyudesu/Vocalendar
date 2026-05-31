@@ -148,166 +148,52 @@ export function createVoiceRoutes(runtime: RuntimeDependencies) {
 
       return {
         onMessage(event, ws) {
-        const context = ws as unknown as VoiceWsContext
-        const finishRealtimeSession = async (sessionId: string) => {
-          await currentRealtimeSession(context)?.finish()
+          const context = ws as unknown as VoiceWsContext
+          const finishRealtimeSession = async (sessionId: string) => {
+            await currentRealtimeSession(context)?.finish()
 
-          const finalTranscript = context.raw.__finalTranscript
+            const finalTranscript = context.raw.__finalTranscript
 
-          if (finalTranscript) {
-            await runtime.repositories.voiceHistory.add(
-              {
-                id: `vh_${crypto.randomUUID()}`,
-                kind: 'asr',
-                provider: 'aliyun',
-                language: context.raw.__language ?? 'zh-CN',
-                requestSummary: {
-                  sampleRate: context.raw.__sampleRate ?? 16000,
-                  audioFormat: context.raw.__audioFormat ?? 'pcm',
-                  enableIntermediateResult: context.raw.__enableIntermediateResult ?? true,
+            if (finalTranscript) {
+              await runtime.repositories.voiceHistory.add(
+                {
+                  id: `vh_${crypto.randomUUID()}`,
+                  kind: 'asr',
+                  provider: 'aliyun',
+                  language: context.raw.__language ?? 'zh-CN',
+                  requestSummary: {
+                    sampleRate: context.raw.__sampleRate ?? 16000,
+                    audioFormat: context.raw.__audioFormat ?? 'pcm',
+                    enableIntermediateResult: context.raw.__enableIntermediateResult ?? true,
+                  },
+                  resultSummary: {
+                    text: finalTranscript.text,
+                    confidence: finalTranscript.confidence,
+                  },
+                  createdAt: nowIso(),
                 },
-                resultSummary: {
-                  text: finalTranscript.text,
-                  confidence: finalTranscript.confidence,
-                },
-                createdAt: nowIso(),
-              },
-              userId,
-            )
-          }
+                userId,
+              )
+            }
 
-          context.send(
-            JSON.stringify({
-              type: 'session.finished',
-              sessionId,
-            }),
-          )
-        }
-
-        if (typeof event.data !== 'string') {
-          const audioBytes = binaryDataToBytes(event.data)
-          const session = currentRealtimeSession(context)
-
-          if (!session) {
-            queuePendingAudio(context, audioBytes)
-            return
-          }
-
-          void session.sendAudio(audioBytes).catch(() => {
             context.send(
               JSON.stringify({
-                type: 'error',
-                code: 'VOICE_PROVIDER_UNAVAILABLE',
-                message: 'Aliyun realtime ASR failed.',
+                type: 'session.finished',
+                sessionId,
               }),
             )
-          })
-          return
-        }
-
-        const parsed = JSON.parse(event.data) as { type?: string }
-
-        if (parsed.type === 'session.start') {
-          const startResult = voiceAsrWsStartMessageSchema.safeParse(parsed)
-
-          if (!startResult.success) {
-            ws.send(
-              JSON.stringify({
-                type: 'error',
-                code: 'VALIDATION_ERROR',
-                message: 'Invalid realtime ASR session.start payload.',
-              }),
-            )
-            return
           }
 
-          const sessionId = `vasr_${crypto.randomUUID()}`
+          if (typeof event.data !== 'string') {
+            const audioBytes = binaryDataToBytes(event.data)
+            const session = currentRealtimeSession(context)
 
-          setSessionId(context, sessionId)
-          setSessionMetadata(context, {
-            language: startResult.data.language,
-            sampleRate: startResult.data.sampleRate,
-            audioFormat: startResult.data.audioFormat,
-            enableIntermediateResult: startResult.data.enableIntermediateResult,
-          })
-          let sessionStarted = false
-          const pendingMessages: string[] = []
-          const sendSessionMessage = (message: string) => {
-            if (!sessionStarted) {
-              pendingMessages.push(message)
+            if (!session) {
+              queuePendingAudio(context, audioBytes)
               return
             }
 
-            context.send(message)
-          }
-          void runtime.voice
-            .startRealtimeSession({
-              language: startResult.data.language,
-              sampleRate: startResult.data.sampleRate,
-              audioFormat: startResult.data.audioFormat,
-              enableIntermediateResult: startResult.data.enableIntermediateResult,
-              enablePunctuation: startResult.data.enablePunctuation,
-              enableInverseTextNormalization: startResult.data.enableInverseTextNormalization,
-              onPartial(result) {
-                sendSessionMessage(
-                  JSON.stringify({
-                    type: 'transcript.partial',
-                    sessionId,
-                    text: result.text,
-                    confidence: result.confidence,
-                    isFinal: false,
-                  }),
-                )
-              },
-              onFinal(result) {
-                setFinalTranscript(context, result)
-                sendSessionMessage(
-                  JSON.stringify({
-                    type: 'transcript.final',
-                    sessionId,
-                    text: result.text,
-                    confidence: result.confidence,
-                    isFinal: true,
-                  }),
-                )
-              },
-            })
-            .then((session) => {
-              setRealtimeSession(context, session)
-              sessionStarted = true
-              context.send(
-                JSON.stringify({
-                  type: 'session.started',
-                  sessionId,
-                }),
-              )
-              for (const message of pendingMessages) {
-                context.send(message)
-              }
-              for (const chunk of consumePendingAudio(context)) {
-                void session.sendAudio(chunk).catch(() => {
-                  context.send(
-                    JSON.stringify({
-                      type: 'error',
-                      code: 'VOICE_PROVIDER_UNAVAILABLE',
-                      message: 'Aliyun realtime ASR failed.',
-                    }),
-                  )
-                })
-              }
-              if (consumePendingFinishRequested(context)) {
-                void finishRealtimeSession(sessionId).catch(() => {
-                  context.send(
-                    JSON.stringify({
-                      type: 'error',
-                      code: 'VOICE_PROVIDER_UNAVAILABLE',
-                      message: 'Aliyun realtime ASR failed.',
-                    }),
-                  )
-                })
-              }
-            })
-            .catch(() => {
+            void session.sendAudio(audioBytes).catch(() => {
               context.send(
                 JSON.stringify({
                   type: 'error',
@@ -316,42 +202,156 @@ export function createVoiceRoutes(runtime: RuntimeDependencies) {
                 }),
               )
             })
-          return
-        }
-
-        if (parsed.type === 'session.finish') {
-          const sessionId = currentSessionId(context)
-
-          if (!sessionId) {
-            context.send(
-              JSON.stringify({
-                type: 'error',
-                code: 'VALIDATION_ERROR',
-                message: 'Realtime ASR session has not been started.',
-              }),
-            )
             return
           }
 
-          if (!currentRealtimeSession(context)) {
-            setPendingFinishRequested(context)
+          const parsed = JSON.parse(event.data) as { type?: string }
+
+          if (parsed.type === 'session.start') {
+            const startResult = voiceAsrWsStartMessageSchema.safeParse(parsed)
+
+            if (!startResult.success) {
+              ws.send(
+                JSON.stringify({
+                  type: 'error',
+                  code: 'VALIDATION_ERROR',
+                  message: 'Invalid realtime ASR session.start payload.',
+                }),
+              )
+              return
+            }
+
+            const sessionId = `vasr_${crypto.randomUUID()}`
+
+            setSessionId(context, sessionId)
+            setSessionMetadata(context, {
+              language: startResult.data.language,
+              sampleRate: startResult.data.sampleRate,
+              audioFormat: startResult.data.audioFormat,
+              enableIntermediateResult: startResult.data.enableIntermediateResult,
+            })
+            let sessionStarted = false
+            const pendingMessages: string[] = []
+            const sendSessionMessage = (message: string) => {
+              if (!sessionStarted) {
+                pendingMessages.push(message)
+                return
+              }
+
+              context.send(message)
+            }
+            void runtime.voice
+              .startRealtimeSession({
+                language: startResult.data.language,
+                sampleRate: startResult.data.sampleRate,
+                audioFormat: startResult.data.audioFormat,
+                enableIntermediateResult: startResult.data.enableIntermediateResult,
+                enablePunctuation: startResult.data.enablePunctuation,
+                enableInverseTextNormalization: startResult.data.enableInverseTextNormalization,
+                onPartial(result) {
+                  sendSessionMessage(
+                    JSON.stringify({
+                      type: 'transcript.partial',
+                      sessionId,
+                      text: result.text,
+                      confidence: result.confidence,
+                      isFinal: false,
+                    }),
+                  )
+                },
+                onFinal(result) {
+                  setFinalTranscript(context, result)
+                  sendSessionMessage(
+                    JSON.stringify({
+                      type: 'transcript.final',
+                      sessionId,
+                      text: result.text,
+                      confidence: result.confidence,
+                      isFinal: true,
+                    }),
+                  )
+                },
+              })
+              .then((session) => {
+                setRealtimeSession(context, session)
+                sessionStarted = true
+                context.send(
+                  JSON.stringify({
+                    type: 'session.started',
+                    sessionId,
+                  }),
+                )
+                for (const message of pendingMessages) {
+                  context.send(message)
+                }
+                for (const chunk of consumePendingAudio(context)) {
+                  void session.sendAudio(chunk).catch(() => {
+                    context.send(
+                      JSON.stringify({
+                        type: 'error',
+                        code: 'VOICE_PROVIDER_UNAVAILABLE',
+                        message: 'Aliyun realtime ASR failed.',
+                      }),
+                    )
+                  })
+                }
+                if (consumePendingFinishRequested(context)) {
+                  void finishRealtimeSession(sessionId).catch(() => {
+                    context.send(
+                      JSON.stringify({
+                        type: 'error',
+                        code: 'VOICE_PROVIDER_UNAVAILABLE',
+                        message: 'Aliyun realtime ASR failed.',
+                      }),
+                    )
+                  })
+                }
+              })
+              .catch(() => {
+                context.send(
+                  JSON.stringify({
+                    type: 'error',
+                    code: 'VOICE_PROVIDER_UNAVAILABLE',
+                    message: 'Aliyun realtime ASR failed.',
+                  }),
+                )
+              })
             return
           }
 
-          void finishRealtimeSession(sessionId).catch(() => {
-            context.send(
-              JSON.stringify({
-                type: 'error',
-                code: 'VOICE_PROVIDER_UNAVAILABLE',
-                message: 'Aliyun realtime ASR failed.',
-              }),
-            )
-          })
-        }
-      },
-    }
-  }),
-)
+          if (parsed.type === 'session.finish') {
+            const sessionId = currentSessionId(context)
+
+            if (!sessionId) {
+              context.send(
+                JSON.stringify({
+                  type: 'error',
+                  code: 'VALIDATION_ERROR',
+                  message: 'Realtime ASR session has not been started.',
+                }),
+              )
+              return
+            }
+
+            if (!currentRealtimeSession(context)) {
+              setPendingFinishRequested(context)
+              return
+            }
+
+            void finishRealtimeSession(sessionId).catch(() => {
+              context.send(
+                JSON.stringify({
+                  type: 'error',
+                  code: 'VOICE_PROVIDER_UNAVAILABLE',
+                  message: 'Aliyun realtime ASR failed.',
+                }),
+              )
+            })
+          }
+        },
+      }
+    }),
+  )
 
   voiceRoutes.post('/tts', async (c) => {
     const body = await c.req.json().catch(() => null)

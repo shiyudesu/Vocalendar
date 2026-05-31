@@ -75,6 +75,38 @@ export interface ApiTransport {
   websocket?: typeof WebSocket
 }
 
+export interface VoiceProviderStatus {
+  name: string
+  available: boolean
+}
+
+export interface VoiceHistoryRecord {
+  id: string
+  kind: 'asr' | 'tts'
+  provider: string
+  language: string
+  requestSummary: Record<string, unknown>
+  resultSummary: Record<string, unknown>
+  createdAt: string
+}
+
+export interface CreateTtsRequest {
+  text: string
+  language: string
+  voice: string
+  speed: number
+}
+
+export interface CreateTtsResponse {
+  audioUrl: string
+  durationMs: number
+  mimeType: string
+}
+
+export interface ListVoiceHistoryResponse {
+  items: VoiceHistoryRecord[]
+}
+
 export type {
   CreateDraftRequest,
   EventRecord,

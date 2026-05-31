@@ -4,6 +4,7 @@ import { createClient } from 'redis'
 import { runPendingSqlMigrations } from '../db/migrator.js'
 import { listSqlMigrationFiles, type SqlMigrationFile } from '../db/migrator.js'
 import { createAliyunVoiceProvider } from '../integrations/voice/aliyun-provider.js'
+import { mockVoiceProvider } from '../integrations/voice/mock-provider.js'
 import type { VoiceProvider } from '../integrations/voice/types.js'
 import { eventMemoryRepository } from '../repositories/events.memory.js'
 import {
@@ -116,7 +117,9 @@ export async function createRuntimeDependencies(source: EnvSource): Promise<Runt
     database,
     redis,
     repositories,
-    voice: createAliyunVoiceProvider(env.voice.aliyun),
+    voice: env.voice.aliyun.accessKeyId.includes('your-')
+      ? mockVoiceProvider
+      : createAliyunVoiceProvider(env.voice.aliyun),
     reminders,
     tokens,
     migrations,
