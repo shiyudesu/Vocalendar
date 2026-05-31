@@ -311,6 +311,40 @@ describe('events v1 routes', () => {
     await runtime.dispose()
   })
 
+  test('creates voice events from ISO datetimes with explicit timezone offsets', async () => {
+    eventMemoryRepository.reset()
+    userMemoryRepository.reset()
+    const runtime = await createRuntimeDependencies(testEnv)
+    const app = createApp({ runtime })
+    const auth = await registerAndGetAccessToken(app, 'events-offset@example.com')
+
+    const createResponse = await app.request('/api/v1/events', {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${auth.accessToken}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        title: '上课',
+        startTime: '2026-06-02T16:00:00.000+08:00',
+        endTime: null,
+        timezone: 'Asia/Shanghai',
+        location: '教学楼',
+        source: 'voice',
+      }),
+    })
+    const createPayload = (await createResponse.json()) as EventPayload
+
+    expect(createResponse.status).toBe(200)
+    expect(createPayload.data.event.title).toBe('上课')
+    expect(createPayload.data.event.startTime).toBe('2026-06-02T16:00:00.000+08:00')
+    expect(createPayload.data.event.endTime).toBeNull()
+    expect(createPayload.data.event.timezone).toBe('Asia/Shanghai')
+    expect(createPayload.data.event.source).toBe('voice')
+
+    await runtime.dispose()
+  })
+
   test('filters event lists by date range, keyword, source, and priority', async () => {
     eventMemoryRepository.reset()
     userMemoryRepository.reset()

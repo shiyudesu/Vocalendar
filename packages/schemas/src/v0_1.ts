@@ -14,11 +14,12 @@ function isValidIanaTimezone(timezone: string) {
 const timezoneSchema = z.string().min(1).refine(isValidIanaTimezone, {
   message: 'Invalid IANA timezone.',
 })
+const isoDateTimeSchema = z.string().datetime({ offset: true })
 
 export const eventDraftParsedSchema = z.object({
   title: z.string().min(1).nullable(),
-  startAt: z.string().datetime().nullable(),
-  endAt: z.string().datetime().nullable(),
+  startAt: isoDateTimeSchema.nullable(),
+  endAt: isoDateTimeSchema.nullable(),
   timezone: timezoneSchema,
   location: z.string().min(1).nullable(),
   participants: z.array(z.string().min(1)),
@@ -28,7 +29,7 @@ export const eventDraftSchema = z.object({
   draftId: z.string().min(1),
   sourceText: z.string().min(1),
   source: eventSourceSchema,
-  referenceAt: z.string().datetime(),
+  referenceAt: isoDateTimeSchema,
   normalizedText: z.string().optional(),
   parsed: eventDraftParsedSchema,
   missingFields: z.array(z.string().min(1)),
@@ -43,22 +44,22 @@ export const eventSchema = z.object({
   id: z.string().min(1),
   title: z.string().min(1),
   description: z.string().nullable(),
-  startAt: z.string().datetime(),
-  endAt: z.string().datetime().nullable(),
+  startAt: isoDateTimeSchema,
+  endAt: isoDateTimeSchema.nullable(),
   timezone: timezoneSchema,
   location: z.string().min(1).nullable(),
   participants: z.array(z.string().min(1)),
   source: eventSourceSchema,
   status: eventStatusSchema,
-  createdAt: z.string().datetime(),
-  updatedAt: z.string().datetime(),
+  createdAt: isoDateTimeSchema,
+  updatedAt: isoDateTimeSchema,
 })
 
 export const eventListItemSchema = z.object({
   id: z.string().min(1),
   title: z.string().min(1),
-  startAt: z.string().datetime(),
-  endAt: z.string().datetime().nullable(),
+  startAt: isoDateTimeSchema,
+  endAt: isoDateTimeSchema.nullable(),
   timezone: timezoneSchema,
   location: z.string().min(1).nullable(),
 })
@@ -66,7 +67,7 @@ export const eventListItemSchema = z.object({
 export const createDraftRequestSchema = z.object({
   sourceText: z.string().min(1),
   timezone: timezoneSchema,
-  referenceAt: z.string().datetime(),
+  referenceAt: isoDateTimeSchema,
   source: eventSourceSchema.default('text'),
 })
 
@@ -76,8 +77,8 @@ export const createEventRequestSchema = z.union([
   }),
   z.object({
     title: z.string().min(1),
-    startTime: z.string().datetime(),
-    endTime: z.string().datetime().nullable().optional(),
+    startTime: isoDateTimeSchema,
+    endTime: isoDateTimeSchema.nullable().optional(),
     timezone: timezoneSchema,
     location: z.string().min(1).nullable().optional(),
     source: eventSourceSchema.default('voice'),
@@ -87,8 +88,8 @@ export const createEventRequestSchema = z.union([
 export const updateDraftFieldsSchema = z
   .object({
     title: z.string().min(1).nullable().optional(),
-    startAt: z.string().datetime().nullable().optional(),
-    endAt: z.string().datetime().nullable().optional(),
+    startAt: isoDateTimeSchema.nullable().optional(),
+    endAt: isoDateTimeSchema.nullable().optional(),
     timezone: timezoneSchema.optional(),
     location: z.string().min(1).nullable().optional(),
     participants: z.array(z.string().min(1)).optional(),
@@ -101,7 +102,7 @@ export const updateDraftFieldsSchema = z
 export const updateDraftRequestSchema = z
   .object({
     userInput: z.string().trim().min(1).optional(),
-    referenceAt: z.string().datetime().optional(),
+    referenceAt: isoDateTimeSchema.optional(),
     fields: updateDraftFieldsSchema.optional(),
   })
   .strict()
@@ -141,8 +142,8 @@ export const queryRangeSchema = z.enum(['today', 'tomorrow', 'week', 'month'])
 export const queryRequestSchema = z
   .object({
     range: queryRangeSchema.nullable().optional(),
-    from: z.string().datetime().nullable().optional(),
-    to: z.string().datetime().nullable().optional(),
+    from: isoDateTimeSchema.nullable().optional(),
+    to: isoDateTimeSchema.nullable().optional(),
     keyword: z.string().trim().min(1).nullable().optional(),
     limit: z.preprocess(
       (value) => (value === undefined ? undefined : Number(value)),

@@ -9,7 +9,7 @@ function isValidIanaTimezone(timezone: string) {
   }
 }
 
-export const isoDateTimeSchema = z.string().datetime()
+export const isoDateTimeSchema = z.string().datetime({ offset: true })
 export const timezoneSchema = z.string().min(1).refine(isValidIanaTimezone, {
   message: 'Invalid IANA timezone.',
 })

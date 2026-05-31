@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest'
 
 import {
+  createEventRequestSchema,
   eventListItemSchema,
   eventSchema,
   listEventsQuerySchema,
@@ -101,6 +102,19 @@ describe('queryRequestSchema', () => {
 })
 
 describe('event schemas', () => {
+  test('accepts direct event creation with an explicit timezone offset', () => {
+    const result = createEventRequestSchema.safeParse({
+      title: '上课',
+      startTime: '2026-06-02T16:00:00.000+08:00',
+      endTime: null,
+      timezone: 'Asia/Shanghai',
+      location: '教学楼',
+      source: 'voice',
+    })
+
+    expect(result.success).toBe(true)
+  })
+
   test('accepts the predeclared event status variants', () => {
     const cancelled = eventSchema.safeParse({
       id: 'evt_123',

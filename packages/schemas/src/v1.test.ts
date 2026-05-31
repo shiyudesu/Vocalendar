@@ -64,6 +64,30 @@ describe('schemas v1', () => {
     expect(result.success).toBe(true)
   })
 
+  test('accepts ISO datetimes with explicit timezone offsets', () => {
+    const result = eventRecordSchema.safeParse({
+      id: 'evt_123',
+      userId: 'usr_123',
+      title: '上课',
+      description: null,
+      startTime: '2026-06-02T16:00:00.000+08:00',
+      endTime: null,
+      allDay: false,
+      timezone: 'Asia/Shanghai',
+      location: '教学楼',
+      recurrence: null,
+      reminders: [],
+      attendees: [],
+      priority: 'normal',
+      tags: [],
+      source: 'voice',
+      createdAt: '2026-05-31T15:43:44.808Z',
+      updatedAt: '2026-05-31T15:43:44.808Z',
+    })
+
+    expect(result.success).toBe(true)
+  })
+
   test('defaults cursor-based event list queries and rejects offset pagination', () => {
     const parsed = eventListQuerySchema.parse({})
 
