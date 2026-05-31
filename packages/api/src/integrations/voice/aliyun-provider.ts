@@ -132,6 +132,7 @@ export function createAliyunVoiceProvider(
       const taskId = compactUuid(randomUUID())
       const startAck = createDeferred<void>()
       const stopAck = createDeferred<void>()
+      let sessionStarted = false
       const onMessage = (message: unknown) => {
         const payload = parseRealtimeMessage(message)
 
@@ -143,12 +144,18 @@ export function createAliyunVoiceProvider(
         const status = Number(payload.header?.status ?? 0)
 
         if (status && status !== 20000000) {
-          startAck.reject(providerUnavailable())
+          console.error(
+            `[aliyun-provider] realtime ASR error: status=${status}, name=${name ?? 'unknown'}`,
+          )
+          if (!sessionStarted) {
+            startAck.reject(providerUnavailable())
+          }
           stopAck.reject(providerUnavailable())
           return
         }
 
         if (name === 'TranscriptionStarted') {
+          sessionStarted = true
           startAck.resolve()
           return
         }
@@ -174,7 +181,10 @@ export function createAliyunVoiceProvider(
         }
       }
       const onError = () => {
-        startAck.reject(providerUnavailable())
+        console.error('[aliyun-provider] realtime ASR websocket error')
+        if (!sessionStarted) {
+          startAck.reject(providerUnavailable())
+        }
         stopAck.reject(providerUnavailable())
       }
 
@@ -234,7 +244,10 @@ export function createAliyunVoiceProvider(
               },
             }),
           )
-          await stopAck.promise
+          await stopAck.promise.catch(() => {
+            // Swallow stop errors so finish() doesn't throw unhandled rejections.
+            // Callers (voice.ts) already handle provider errors via WebSocket messages.
+          })
           socket.close()
         },
       }
