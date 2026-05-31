@@ -4,6 +4,8 @@ import type {
   ApiTransport,
   AuthSessionResponse,
   CreateDraftRequest,
+  CreateTtsRequest,
+  CreateTtsResponse,
   EventRecord,
   ListEventsInput,
   ListEventsResponse,
@@ -15,6 +17,8 @@ import type {
   UpdateEventRequest,
   UpdateUserSettingsRequest,
   UserProfile,
+  VoiceHistoryRecord,
+  VoiceProviderStatus,
   V1EventDraftRecord,
 } from './api-types'
 
@@ -211,6 +215,28 @@ export class ApiClient {
       },
     )
     return payload.notification
+  }
+
+  async getVoiceProviders() {
+    const payload = await this.request<{ providers: VoiceProviderStatus[] }>(
+      '/api/v1/voice/providers',
+    )
+    return payload.providers
+  }
+
+  async getVoiceHistory() {
+    const payload = await this.request<{ items: VoiceHistoryRecord[] }>('/api/v1/voice-history')
+    return payload.items
+  }
+
+  async createTts(input: CreateTtsRequest) {
+    return await this.request<CreateTtsResponse>('/api/v1/voice/tts', {
+      method: 'POST',
+      body: JSON.stringify(input),
+      headers: {
+        'content-type': 'application/json',
+      },
+    })
   }
 
   connectRealtime(onMessage: (message: RealtimeEnvelope) => void) {
