@@ -633,6 +633,14 @@ function App() {
     }),
   )
   const realtimeRef = useRef<WebSocket | null>(null)
+  // TTS playback control: only the latest playTts call is allowed to actually
+  // play audio. Earlier in-flight requests bail when they see their token has
+  // been superseded, and any currently-playing audio is paused before a new
+  // playback starts. Prevents overlapping voices when the user e.g. taps
+  // "确认" multiple times or when a follow-up TTS is triggered before the
+  // previous reply has finished playing.
+  const ttsTokenRef = useRef(0)
+  const ttsAudioRef = useRef<HTMLAudioElement | null>(null)
 
   const [page, setPage] = useState<Page>('calendar')
   const [calendarView, setCalendarView] = useState<CalendarViewType>('week')
@@ -756,6 +764,22 @@ function App() {
         console.log('[TTS] skipped: voiceFeedback is disabled')
         return
       }
+
+      // Stop any currently-playing audio synchronously so the user never
+      // hears two voices at once. The previous TTS request (if any) will
+      // bail out when it sees its token has been superseded.
+      const previousAudio = ttsAudioRef.current
+      if (previousAudio) {
+        try {
+          previousAudio.pause()
+          previousAudio.src = ''
+        } catch {
+          // ignore; element may have already been GC'd
+        }
+        ttsAudioRef.current = null
+      }
+      const myToken = ++ttsTokenRef.current
+
       try {
         console.log('[TTS] requesting:', text)
         const tts = await clientRef.current.createTts({
@@ -764,12 +788,29 @@ function App() {
           voice: currentUser.settings.language.startsWith('zh') ? 'xiaoyun' : 'en-US-JennyNeural',
           speed: currentUser.settings.voiceSpeed,
         })
+
+        if (myToken !== ttsTokenRef.current) {
+          // A newer playTts call has started; drop this stale audio so we
+          // don't queue it behind the new one.
+          console.log('[TTS] superseded, dropping stale audio')
+          return
+        }
+
         console.log('[TTS] received audio, duration:', tts.durationMs)
         const audio = new Audio(tts.audioUrl)
-        await audio.play()
+        audio.addEventListener('ended', () => {
+          if (ttsAudioRef.current === audio) {
+            ttsAudioRef.current = null
+          }
+        })
+        ttsAudioRef.current = audio
         console.log('[TTS] playing')
+        await audio.play()
       } catch (error) {
-        console.error('[TTS] error:', error)
+        // Don't log stale errors from superseded requests
+        if (myToken === ttsTokenRef.current) {
+          console.error('[TTS] error:', error)
+        }
       }
     },
     [currentUser],

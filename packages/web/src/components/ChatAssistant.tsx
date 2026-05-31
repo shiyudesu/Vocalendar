@@ -30,6 +30,10 @@ export function ChatAssistant({
   onEventsChange,
 }: ChatAssistantProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  // Remember the id of the last assistant message we've already spoken so
+  // action-status updates (which produce a new chat.messages reference) don't
+  // re-trigger TTS for the same reply.
+  const lastSpokenMessageIdRef = useRef<string | null>(null)
 
   const recentEvents: RecentEventContext[] = useMemo(() => {
     return events
@@ -60,7 +64,13 @@ export function ChatAssistant({
 
   useEffect(() => {
     const lastMessage = chat.messages[chat.messages.length - 1]
-    if (lastMessage?.role === 'assistant' && voiceFeedback) {
+    if (
+      lastMessage?.role === 'assistant' &&
+      voiceFeedback &&
+      lastMessage.content.trim().length > 0 &&
+      lastSpokenMessageIdRef.current !== lastMessage.id
+    ) {
+      lastSpokenMessageIdRef.current = lastMessage.id
       void onPlayTts(lastMessage.content)
     }
   }, [chat.messages, voiceFeedback, onPlayTts])
