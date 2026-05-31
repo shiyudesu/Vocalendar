@@ -13,6 +13,7 @@ import { z } from 'zod'
 import {
   addAttendee,
   batchDeleteEvents,
+  createEventDirectly,
   createEventFromDraft,
   deleteEvent,
   getEvent,
@@ -70,27 +71,42 @@ export function createEventRoutes(runtime: EventRouteDependencies) {
       return validationError(c, result.error.flatten())
     }
 
-    const createResult = await createEventFromDraft(
-      result.data.draftId,
+    const data = result.data
+
+    if ('draftId' in data) {
+      const createResult = await createEventFromDraft(data.draftId, dependencies, currentUserId)
+
+      if (!createResult.ok) {
+        if (createResult.reason === 'not_found') {
+          return notFoundWithCode(
+            c,
+            'Draft was not found.',
+            { draftId: data.draftId },
+            'DRAFT_NOT_FOUND',
+          )
+        }
+
+        return draftMissingFields(c, {
+          draftId: data.draftId,
+          missingFields: createResult.missingFields,
+        })
+      }
+
+      return ok(c, { event: createResult.event })
+    }
+
+    const createResult = await createEventDirectly(
+      {
+        title: data.title,
+        startTime: data.startTime,
+        endTime: data.endTime ?? null,
+        timezone: data.timezone,
+        location: data.location ?? null,
+        source: data.source,
+      },
       dependencies,
       currentUserId,
     )
-
-    if (!createResult.ok) {
-      if (createResult.reason === 'not_found') {
-        return notFoundWithCode(
-          c,
-          'Draft was not found.',
-          { draftId: result.data.draftId },
-          'DRAFT_NOT_FOUND',
-        )
-      }
-
-      return draftMissingFields(c, {
-        draftId: result.data.draftId,
-        missingFields: createResult.missingFields,
-      })
-    }
 
     return ok(c, { event: createResult.event })
   })
