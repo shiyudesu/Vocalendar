@@ -1,4 +1,4 @@
-import type { Event } from '../data/mock'
+import type { Event } from './models'
 
 const TAG_DELIMITER_RE = /[,，\n]+/
 

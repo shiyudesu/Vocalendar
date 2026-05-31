@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch --clear-screen=false src/index.ts",
+    "dev": "node --env-file=../../.env --import tsx --watch src/index.ts",
     "build": "tsdown src/index.ts --format esm --platform node --out-dir dist --clean",
     "check": "rslint --type-check . && oxfmt --check .",
     "test": "vitest run",

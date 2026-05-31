@@ -1,7 +1,7 @@
 import { Mic, MicOff, Volume2, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
-import { quickCommands, voiceHistory } from '../data/mock'
+import { placeholderVoiceHistory, quickCommands } from '../lib/voice-ui'
 
 export function VoiceModal({ onClose }: { onClose: () => void }) {
   const [isRecording, setIsRecording] = useState(false)
@@ -242,7 +242,7 @@ export function VoiceModal({ onClose }: { onClose: () => void }) {
             最近语音记录
           </h4>
           <div className="flex max-h-32 flex-col gap-2 overflow-y-auto">
-            {voiceHistory.map((item) => (
+            {placeholderVoiceHistory.map((item) => (
               <div className="rounded-lg border border-slate-100 bg-slate-50 p-2.5" key={item.id}>
                 <p className="text-xs text-slate-700">「{item.text}」</p>
                 <p className="mt-0.5 text-[11px] text-teal-600">{item.result}</p>

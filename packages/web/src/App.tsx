@@ -3,6 +3,7 @@ import {
   CalendarDays,
   ChevronLeft,
   ChevronRight,
+  LoaderCircle,
   Menu,
   Mic,
   Moon,
@@ -14,9 +15,10 @@ import {
   Volume2,
   X,
 } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { MouseEvent as ReactMouseEvent } from 'react'
 
+import { AuthScreen } from './components/AuthScreen'
 import type { CalendarViewType } from './components/CalendarViews'
 import {
   CalendarContainer,
@@ -24,15 +26,34 @@ import {
   DateNavigator,
   navigateDate,
 } from './components/CalendarViews'
-import { CreateEventModal, EventModal } from './components/EventModal'
+import { DraftComposerModal } from './components/DraftComposerModal'
+import { EventModal } from './components/EventModal'
 import { TagFilterBar } from './components/TagFilterBar'
 import { TagManager } from './components/TagManager'
 import { VoiceModal } from './components/VoiceModal'
-import { getEventsForDate, mockEvents, mockNotifications, mockUser } from './data/mock'
-import type { Event, Reminder } from './data/mock'
+import {
+  toEventModel,
+  toNotificationModel,
+  toUpdateEventRequest,
+  toUserModel,
+} from './lib/adapters'
+import { ApiClient, ApiClientError } from './lib/api-client'
+import type { RealtimeEnvelope, V1EventDraftRecord } from './lib/api-types'
+import { getEventsForDate } from './lib/calendar'
+import type { Event, NotificationItem, User, UserSettings } from './lib/models'
+import { clearSession, loadSession, saveSession } from './lib/session'
 import { getAllTagNames } from './lib/tags'
 
 type Page = 'calendar' | 'voice' | 'settings'
+
+const SIDEBAR_DEFAULT_WIDTH = 240
+const SIDEBAR_MIN_WIDTH = 200
+const SIDEBAR_MAX_WIDTH = 480
+const SIDEBAR_WIDTH_STORAGE_KEY = 'vocalendar:sidebarWidth'
+const HIDDEN_TAGS_STORAGE_KEY = 'vocalendar:hiddenTags'
+const EVENT_WINDOW_BEFORE_DAYS = 45
+const EVENT_WINDOW_AFTER_DAYS = 120
+const jsonApi = JSON
 
 function getTodayStart(): Date {
   const now = new Date()
@@ -43,19 +64,70 @@ function formatTime(date: Date): string {
   return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
 }
 
-// ─── Notification Panel ───
+function loadHiddenTags(): Set<string> {
+  if (typeof window === 'undefined') return new Set()
+
+  try {
+    const raw = window.localStorage.getItem(HIDDEN_TAGS_STORAGE_KEY)
+    if (!raw) return new Set()
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return new Set()
+    return new Set(parsed.filter((value): value is string => typeof value === 'string'))
+  } catch {
+    return new Set()
+  }
+}
+
+function addDays(date: Date, days: number) {
+  const value = new Date(date)
+  value.setDate(value.getDate() + days)
+  return value
+}
+
+function getEventWindow(currentDate: Date) {
+  const startDate = addDays(currentDate, -EVENT_WINDOW_BEFORE_DAYS)
+  startDate.setHours(0, 0, 0, 0)
+  const endDate = addDays(currentDate, EVENT_WINDOW_AFTER_DAYS)
+  endDate.setHours(23, 59, 59, 999)
+
+  return {
+    startDate: startDate.toISOString(),
+    endDate: endDate.toISOString(),
+  }
+}
+
+function toErrorMessage(error: unknown) {
+  if (error instanceof ApiClientError) {
+    return error.message
+  }
+
+  if (error instanceof Error) {
+    return error.message
+  }
+
+  return '请求失败，请稍后重试。'
+}
+
+function isRealtimeEvent(message: RealtimeEnvelope) {
+  return (
+    message.type === 'event.created' ||
+    message.type === 'event.updated' ||
+    message.type === 'event.deleted'
+  )
+}
 
 function NotificationPanel({
   notifications,
   onClose,
 }: {
-  notifications: typeof mockNotifications
+  notifications: NotificationItem[]
   onClose: () => void
 }) {
   useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') onClose()
+    function onKey(event: KeyboardEvent) {
+      if (event.key === 'Escape') onClose()
     }
+
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
@@ -77,13 +149,16 @@ function NotificationPanel({
         {notifications.length === 0 ? (
           <div className="px-4 py-8 text-center text-sm text-slate-400">暂无通知</div>
         ) : (
-          notifications.map((n) => (
-            <div className="border-b border-slate-50 px-4 py-3 last:border-b-0" key={n.id}>
+          notifications.map((notification) => (
+            <div
+              className="border-b border-slate-50 px-4 py-3 last:border-b-0"
+              key={notification.id}
+            >
               <div className="flex items-start gap-2">
                 <div className="flex-1">
-                  <p className="text-sm font-medium text-slate-800">{n.title}</p>
-                  <p className="mt-0.5 text-xs text-slate-500">{n.message}</p>
-                  <p className="mt-1 text-[11px] text-slate-400">{formatTime(n.time)}</p>
+                  <p className="text-sm font-medium text-slate-800">{notification.title}</p>
+                  <p className="mt-0.5 text-xs text-slate-500">{notification.message}</p>
+                  <p className="mt-1 text-[11px] text-slate-400">{formatTime(notification.time)}</p>
                 </div>
               </div>
             </div>
@@ -93,8 +168,6 @@ function NotificationPanel({
     </div>
   )
 }
-
-// ─── Mini Calendar Sidebar ───
 
 function MiniCalendar({
   currentDate,
@@ -106,14 +179,13 @@ function MiniCalendar({
   onSelectDate: (date: Date) => void
 }) {
   const [displayMonth, setDisplayMonth] = useState(() => {
-    const d = new Date(currentDate)
-    d.setDate(1)
-    return d
+    const value = new Date(currentDate)
+    value.setDate(1)
+    return value
   })
 
   const year = displayMonth.getFullYear()
   const month = displayMonth.getMonth()
-
   const firstDay = new Date(year, month, 1)
   const startOffset = firstDay.getDay()
   const daysInMonth = new Date(year, month + 1, 0).getDate()
@@ -121,19 +193,18 @@ function MiniCalendar({
 
   const days: { date: Date; isCurrentMonth: boolean }[] = []
 
-  // Previous month padding
-  for (let i = startOffset - 1; i >= 0; i--) {
-    const d = new Date(year, month, -i)
-    days.push({ date: d, isCurrentMonth: false })
+  for (let index = startOffset - 1; index >= 0; index -= 1) {
+    days.push({ date: new Date(year, month, -index), isCurrentMonth: false })
   }
-  // Current month
-  for (let i = 1; i <= daysInMonth; i++) {
-    days.push({ date: new Date(year, month, i), isCurrentMonth: true })
+
+  for (let day = 1; day <= daysInMonth; day += 1) {
+    days.push({ date: new Date(year, month, day), isCurrentMonth: true })
   }
-  // Next month padding
+
   const remaining = 42 - days.length
-  for (let i = 1; i <= remaining; i++) {
-    days.push({ date: new Date(year, month + 1, i), isCurrentMonth: false })
+
+  for (let day = 1; day <= remaining; day += 1) {
+    days.push({ date: new Date(year, month + 1, day), isCurrentMonth: false })
   }
 
   const weekDays = ['日', '一', '二', '三', '四', '五', '六']
@@ -162,12 +233,12 @@ function MiniCalendar({
         </button>
       </div>
       <div className="grid grid-cols-7 gap-0.5">
-        {weekDays.map((d) => (
-          <div className="py-1 text-center text-[10px] font-medium text-slate-400" key={d}>
-            {d}
+        {weekDays.map((day) => (
+          <div className="py-1 text-center text-[10px] font-medium text-slate-400" key={day}>
+            {day}
           </div>
         ))}
-        {days.map(({ date, isCurrentMonth }, i) => {
+        {days.map(({ date, isCurrentMonth }, index) => {
           const isToday =
             date.getDate() === today.getDate() &&
             date.getMonth() === today.getMonth() &&
@@ -189,16 +260,16 @@ function MiniCalendar({
                       ? 'text-slate-700 hover:bg-slate-100'
                       : 'text-slate-300'
               }`}
-              key={i}
+              key={index}
               onClick={() => onSelectDate(new Date(date))}
               type="button"
             >
               <span>{date.getDate()}</span>
-              {hasEvents && !isSelected && (
+              {hasEvents && !isSelected ? (
                 <span
                   className={`h-1 w-1 rounded-full ${isToday ? 'bg-teal-500' : 'bg-teal-400'}`}
                 />
-              )}
+              ) : null}
             </button>
           )
         })}
@@ -207,18 +278,16 @@ function MiniCalendar({
   )
 }
 
-// ─── Upcoming Events Sidebar ───
-
 function UpcomingEvents({
   events,
   onEventClick,
 }: {
   events: Event[]
-  onEventClick: (e: Event) => void
+  onEventClick: (event: Event) => void
 }) {
   const upcoming = events
-    .filter((e) => e.startTime >= new Date())
-    .sort((a, b) => a.startTime.getTime() - b.startTime.getTime())
+    .filter((event) => event.startTime >= new Date())
+    .sort((left, right) => left.startTime.getTime() - right.startTime.getTime())
     .slice(0, 5)
 
   return (
@@ -246,28 +315,27 @@ function UpcomingEvents({
             </div>
           </button>
         ))}
-        {upcoming.length === 0 && (
+        {upcoming.length === 0 ? (
           <p className="py-2 text-center text-xs text-slate-400">暂无事件</p>
-        )}
+        ) : null}
       </div>
     </div>
   )
 }
 
-// ─── Settings Page ───
-
 function SettingsPage({
+  user,
   events,
   hiddenTags,
-  onRenameTag,
-  onDeleteTag,
+  settingsSaving,
+  onUpdateSettings,
 }: {
+  user: User
   events: Event[]
   hiddenTags: Set<string>
-  onRenameTag: (from: string, to: string) => void
-  onDeleteTag: (tag: string) => void
+  settingsSaving: boolean
+  onUpdateSettings: (input: Partial<UserSettings>) => Promise<void>
 }) {
-  const [settings, setSettings] = useState(mockUser.settings)
   const [activeTab, setActiveTab] = useState<'general' | 'voice' | 'tags' | 'account'>('general')
 
   return (
@@ -278,7 +346,6 @@ function SettingsPage({
       </div>
 
       <div className="flex gap-6">
-        {/* Tabs */}
         <div className="w-48 shrink-0 space-y-1">
           {[
             { id: 'general' as const, label: '通用', icon: Settings },
@@ -302,9 +369,8 @@ function SettingsPage({
           ))}
         </div>
 
-        {/* Content */}
         <div className="flex-1 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-          {activeTab === 'general' && (
+          {activeTab === 'general' ? (
             <div className="space-y-6">
               <div>
                 <h3 className="text-lg font-semibold text-slate-900">通用设置</h3>
@@ -322,19 +388,20 @@ function SettingsPage({
                       { value: 'light' as const, icon: Sun, label: '浅色' },
                       { value: 'dark' as const, icon: Moon, label: '深色' },
                       { value: 'system' as const, icon: Settings, label: '跟随系统' },
-                    ].map((opt) => (
+                    ].map((option) => (
                       <button
                         className={`flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition ${
-                          settings.theme === opt.value
+                          user.settings.theme === option.value
                             ? 'border-slate-900 bg-slate-900 text-white'
                             : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
                         }`}
-                        key={opt.value}
-                        onClick={() => setSettings((s) => ({ ...s, theme: opt.value }))}
+                        disabled={settingsSaving}
+                        key={option.value}
+                        onClick={() => void onUpdateSettings({ theme: option.value })}
                         type="button"
                       >
-                        <opt.icon size={14} />
-                        {opt.label}
+                        <option.icon size={14} />
+                        {option.label}
                       </button>
                     ))}
                   </div>
@@ -347,13 +414,13 @@ function SettingsPage({
                   </div>
                   <select
                     className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-teal-600"
-                    onChange={(e) =>
-                      setSettings((s) => ({
-                        ...s,
-                        defaultView: e.target.value as typeof settings.defaultView,
-                      }))
+                    disabled={settingsSaving}
+                    onChange={(event) =>
+                      void onUpdateSettings({
+                        defaultView: event.target.value as UserSettings['defaultView'],
+                      })
                     }
-                    value={settings.defaultView}
+                    value={user.settings.defaultView}
                   >
                     <option value="day">日视图</option>
                     <option value="week">周视图</option>
@@ -369,13 +436,13 @@ function SettingsPage({
                   </div>
                   <select
                     className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-teal-600"
-                    onChange={(e) =>
-                      setSettings((s) => ({
-                        ...s,
-                        defaultReminderMinutes: Number(e.target.value),
-                      }))
+                    disabled={settingsSaving}
+                    onChange={(event) =>
+                      void onUpdateSettings({
+                        defaultReminderMinutes: Number(event.target.value),
+                      })
                     }
-                    value={settings.defaultReminderMinutes}
+                    value={user.settings.defaultReminderMinutes}
                   >
                     <option value={0}>准时</option>
                     <option value={5}>提前 5 分钟</option>
@@ -387,9 +454,9 @@ function SettingsPage({
                 </div>
               </div>
             </div>
-          )}
+          ) : null}
 
-          {activeTab === 'voice' && (
+          {activeTab === 'voice' ? (
             <div className="space-y-6">
               <div>
                 <h3 className="text-lg font-semibold text-slate-900">语音设置</h3>
@@ -404,22 +471,24 @@ function SettingsPage({
                   </div>
                   <button
                     className={`relative h-6 w-11 rounded-full transition ${
-                      settings.voiceFeedback ? 'bg-teal-500' : 'bg-slate-300'
+                      user.settings.voiceFeedback ? 'bg-teal-500' : 'bg-slate-300'
                     }`}
+                    disabled={settingsSaving}
                     onClick={() =>
-                      setSettings((s) => ({
-                        ...s,
-                        voiceFeedback: !s.voiceFeedback,
-                      }))
+                      void onUpdateSettings({
+                        voiceFeedback: !user.settings.voiceFeedback,
+                      })
                     }
                     type="button"
                   >
                     <span
                       className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
-                        settings.voiceFeedback ? 'translate-x-5.5' : 'translate-x-0.5'
+                        user.settings.voiceFeedback ? 'translate-x-5.5' : 'translate-x-0.5'
                       }`}
                       style={{
-                        transform: settings.voiceFeedback ? 'translateX(22px)' : 'translateX(2px)',
+                        transform: user.settings.voiceFeedback
+                          ? 'translateX(22px)'
+                          : 'translateX(2px)',
                       }}
                     />
                   </button>
@@ -434,21 +503,21 @@ function SettingsPage({
                     <span className="text-xs text-slate-400">慢</span>
                     <input
                       className="w-32 accent-teal-600"
+                      disabled={settingsSaving}
                       max={2}
                       min={0.5}
-                      onChange={(e) =>
-                        setSettings((s) => ({
-                          ...s,
-                          voiceSpeed: Number(e.target.value),
-                        }))
+                      onChange={(event) =>
+                        void onUpdateSettings({
+                          voiceSpeed: Number(event.target.value),
+                        })
                       }
                       step={0.1}
                       type="range"
-                      value={settings.voiceSpeed}
+                      value={user.settings.voiceSpeed}
                     />
                     <span className="text-xs text-slate-400">快</span>
                     <span className="w-8 text-right text-xs font-medium text-slate-700">
-                      {settings.voiceSpeed}x
+                      {user.settings.voiceSpeed}x
                     </span>
                   </div>
                 </div>
@@ -460,7 +529,13 @@ function SettingsPage({
                   </div>
                   <select
                     className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-teal-600"
-                    value={settings.language}
+                    disabled={settingsSaving}
+                    onChange={(event) =>
+                      void onUpdateSettings({
+                        language: event.target.value,
+                      })
+                    }
+                    value={user.settings.language}
                   >
                     <option value="zh-CN">中文（普通话）</option>
                     <option value="en-US">English (US)</option>
@@ -469,18 +544,23 @@ function SettingsPage({
                 </div>
               </div>
             </div>
-          )}
+          ) : null}
 
-          {activeTab === 'tags' && (
-            <TagManager
-              events={events}
-              hiddenTags={hiddenTags}
-              onDelete={onDeleteTag}
-              onRename={onRenameTag}
-            />
-          )}
+          {activeTab === 'tags' ? (
+            <div className="space-y-4">
+              <TagManager
+                events={events}
+                hiddenTags={hiddenTags}
+                onDelete={() => undefined}
+                onRename={() => undefined}
+              />
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                标签管理接口尚未接入，本页当前仅保留查看与筛选上下文。
+              </div>
+            </div>
+          ) : null}
 
-          {activeTab === 'account' && (
+          {activeTab === 'account' ? (
             <div className="space-y-6">
               <div>
                 <h3 className="text-lg font-semibold text-slate-900">账户信息</h3>
@@ -489,68 +569,44 @@ function SettingsPage({
 
               <div className="flex items-center gap-4">
                 <div className="flex h-16 w-16 items-center justify-center rounded-full bg-teal-100 text-xl font-bold text-teal-700">
-                  {mockUser.name[0]}
+                  {user.name[0]}
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-slate-900">{mockUser.name}</p>
-                  <p className="text-sm text-slate-500">{mockUser.email}</p>
-                  <p className="mt-1 text-xs text-slate-400">时区：{mockUser.timezone}</p>
+                  <p className="text-sm font-semibold text-slate-900">{user.name}</p>
+                  <p className="text-sm text-slate-500">{user.email}</p>
+                  <p className="mt-1 text-xs text-slate-400">时区：{user.timezone}</p>
                 </div>
               </div>
 
               <div className="space-y-3">
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-slate-700">显示名称</label>
-                  <input
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
-                    defaultValue={mockUser.name}
-                    type="text"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-slate-700">邮箱</label>
-                  <input
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
-                    defaultValue={mockUser.email}
-                    type="email"
-                  />
-                </div>
+                <ReadonlyField label="显示名称" value={user.name} />
+                <ReadonlyField label="邮箱" value={user.email} />
               </div>
 
-              <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 p-4">
-                <div>
-                  <p className="text-sm font-medium text-slate-700">数据导出</p>
-                  <p className="text-xs text-slate-500">导出日历事件为 ICS / CSV 格式</p>
-                </div>
-                <button
-                  className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-                  type="button"
-                >
-                  导出数据
-                </button>
-              </div>
-
-              <div className="flex items-center justify-between rounded-lg border border-rose-100 bg-rose-50 p-4">
-                <div>
-                  <p className="text-sm font-medium text-rose-700">删除账户</p>
-                  <p className="text-xs text-rose-500">此操作不可撤销</p>
-                </div>
-                <button
-                  className="rounded-lg border border-rose-200 bg-white px-4 py-2 text-sm font-medium text-rose-600 transition hover:bg-rose-50"
-                  type="button"
-                >
-                  删除账户
-                </button>
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                <p className="text-sm font-medium text-slate-700">账户操作</p>
+                <p className="mt-1 text-xs text-slate-500">
+                  资料编辑、数据导出和账户删除将在后续阶段接入真实 API。
+                </p>
               </div>
             </div>
-          )}
+          ) : null}
         </div>
       </div>
     </div>
   )
 }
 
-// ─── Voice Assistant Page ───
+function ReadonlyField({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <label className="mb-1 block text-sm font-medium text-slate-700">{label}</label>
+      <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+        {value}
+      </div>
+    </div>
+  )
+}
 
 function VoicePage() {
   const [showVoiceModal, setShowVoiceModal] = useState(false)
@@ -565,6 +621,14 @@ function VoicePage() {
         <p className="mt-2 text-slate-500">用自然语言快速创建、查询和修改日程</p>
       </div>
 
+      <div className="mb-8 rounded-xl border border-amber-200 bg-amber-50 p-5 shadow-sm">
+        <h3 className="text-sm font-semibold text-amber-900">真实语音链路暂未接入</h3>
+        <p className="mt-2 text-sm leading-relaxed text-amber-800">
+          当前前端已接入真实登录、事件、通知和设置接口；浏览器录音、在线 ASR
+          与语音历史仍处于开发中。
+        </p>
+      </div>
+
       <button
         className="mx-auto mb-8 flex h-24 w-24 items-center justify-center rounded-full bg-slate-900 text-white shadow-xl shadow-slate-300 transition hover:scale-105 hover:bg-teal-700"
         onClick={() => setShowVoiceModal(true)}
@@ -574,77 +638,77 @@ function VoicePage() {
       </button>
 
       <div className="mb-8 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h3 className="mb-4 text-sm font-semibold text-slate-800">您可以这样说</h3>
+        <h3 className="mb-4 text-sm font-semibold text-slate-800">后续将支持</h3>
         <div className="grid gap-3 sm:grid-cols-2">
           {[
-            '明天下午三点和张总在国贸喝咖啡',
-            '每周一三五晚上 8 点提醒我去健身',
-            '把我刚才加的会议删掉',
-            '下周我要出差吗？',
-            '会议延期 15 分钟',
-            '今天有什么安排？',
-          ].map((example) => (
+            '浏览器录音后直连 /voice/asr',
+            '语音历史读取 /voice-history',
+            'provider 状态展示',
+            '语音创建与文本草稿统一确认',
+          ].map((item) => (
             <div
               className="rounded-lg border border-slate-100 bg-slate-50 p-3 text-sm text-slate-600"
-              key={example}
+              key={item}
             >
-              「{example}」
+              {item}
             </div>
           ))}
         </div>
       </div>
 
-      <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h3 className="mb-4 text-sm font-semibold text-slate-800">快捷指令</h3>
-        <div className="flex flex-wrap gap-2">
-          {['我到家了', '会议延期 15 分钟', '会议取消', '今天有什么安排', '下周日程'].map((cmd) => (
-            <span
-              className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-600"
-              key={cmd}
-            >
-              {cmd}
-            </span>
-          ))}
-        </div>
-      </div>
-
-      {showVoiceModal && <VoiceModal onClose={() => setShowVoiceModal(false)} />}
+      {showVoiceModal ? <VoiceModal onClose={() => setShowVoiceModal(false)} /> : null}
     </div>
   )
 }
 
-// ─── Main App ───
-
-const SIDEBAR_DEFAULT_WIDTH = 240
-const SIDEBAR_MIN_WIDTH = 200
-const SIDEBAR_MAX_WIDTH = 480
-const SIDEBAR_WIDTH_STORAGE_KEY = 'vocalendar:sidebarWidth'
-const HIDDEN_TAGS_STORAGE_KEY = 'vocalendar:hiddenTags'
-
-function loadHiddenTags(): Set<string> {
-  if (typeof window === 'undefined') return new Set()
-  try {
-    const raw = window.localStorage.getItem(HIDDEN_TAGS_STORAGE_KEY)
-    if (!raw) return new Set()
-    const parsed = JSON.parse(raw)
-    if (!Array.isArray(parsed)) return new Set()
-    return new Set(parsed.filter((x): x is string => typeof x === 'string'))
-  } catch {
-    return new Set()
-  }
-}
-
 function App() {
+  const sessionRef = useRef(loadSession())
+  const clientRef = useRef(
+    new ApiClient({
+      getSessionTokens: () =>
+        sessionRef.current
+          ? {
+              accessToken: sessionRef.current.accessToken,
+              refreshToken: sessionRef.current.refreshToken,
+            }
+          : null,
+      onSessionTokens: (tokens) => {
+        if (!sessionRef.current) return
+        sessionRef.current = {
+          ...sessionRef.current,
+          accessToken: tokens.accessToken,
+          refreshToken: tokens.refreshToken,
+        }
+        saveSession(sessionRef.current)
+      },
+      onUnauthorized: () => {
+        sessionRef.current = null
+        clearSession()
+      },
+    }),
+  )
+  const realtimeRef = useRef<WebSocket | null>(null)
+
   const [page, setPage] = useState<Page>('calendar')
   const [calendarView, setCalendarView] = useState<CalendarViewType>('week')
   const [currentDate, setCurrentDate] = useState(() => getTodayStart())
-  const [events, setEvents] = useState<Event[]>(mockEvents)
+  const [currentUser, setCurrentUser] = useState<User | null>(sessionRef.current?.user ?? null)
+  const [events, setEvents] = useState<Event[]>([])
+  const [notifications, setNotifications] = useState<NotificationItem[]>([])
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showVoiceModal, setShowVoiceModal] = useState(false)
   const [showNotifPanel, setShowNotifPanel] = useState(false)
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false)
-  const [notifications, setNotifications] = useState(mockNotifications)
+  const [isResizingSidebar, setIsResizingSidebar] = useState(false)
+  const [authPending, setAuthPending] = useState(false)
+  const [authError, setAuthError] = useState<string | null>(null)
+  const [bootPending, setBootPending] = useState(Boolean(sessionRef.current))
+  const [eventsPending, setEventsPending] = useState(false)
+  const [notificationsPending, setNotificationsPending] = useState(false)
+  const [settingsSaving, setSettingsSaving] = useState(false)
+  const [createPending, setCreatePending] = useState(false)
+  const [createError, setCreateError] = useState<string | null>(null)
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
     if (typeof window === 'undefined') return SIDEBAR_DEFAULT_WIDTH
     const stored = window.localStorage.getItem(SIDEBAR_WIDTH_STORAGE_KEY)
@@ -652,37 +716,35 @@ function App() {
     if (Number.isNaN(parsed)) return SIDEBAR_DEFAULT_WIDTH
     return Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, parsed))
   })
-  const [isResizingSidebar, setIsResizingSidebar] = useState(false)
   const [hiddenTags, setHiddenTags] = useState<Set<string>>(() => loadHiddenTags())
 
   const selectedEvent = selectedEventId
-    ? (events.find((e) => e.id === selectedEventId) ?? null)
+    ? (events.find((event) => event.id === selectedEventId) ?? null)
     : null
-
   const tagSuggestions = useMemo(() => getAllTagNames(events), [events])
-
-  // Sanitize hiddenTags against the live tag set: drop entries that no longer
-  // correspond to any event (after rename / delete / mock reload).
   const sanitizedHiddenTags = useMemo(() => {
     const live = new Set(tagSuggestions)
     const next = new Set<string>()
-    for (const t of hiddenTags) if (live.has(t)) next.add(t)
+    for (const tag of hiddenTags) {
+      if (live.has(tag)) next.add(tag)
+    }
     return next
   }, [hiddenTags, tagSuggestions])
-
   const visibleEvents = useMemo(() => {
     if (sanitizedHiddenTags.size === 0) return events
-    return events.filter((e) => {
-      if (!e.tags || e.tags.length === 0) return true
-      return e.tags.some((t) => !sanitizedHiddenTags.has(t))
+
+    return events.filter((event) => {
+      if (!event.tags || event.tags.length === 0) return true
+      return event.tags.some((tag) => !sanitizedHiddenTags.has(tag))
     })
   }, [events, sanitizedHiddenTags])
+  const hasUnreadNotif = notifications.some((notification) => !notification.read)
 
   useEffect(() => {
     try {
       window.localStorage.setItem(
         HIDDEN_TAGS_STORAGE_KEY,
-        JSON.stringify(Array.from(sanitizedHiddenTags)),
+        jsonApi.stringify(Array.from(sanitizedHiddenTags)),
       )
     } catch {
       // ignore
@@ -693,77 +755,338 @@ function App() {
     try {
       window.localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, String(sidebarWidth))
     } catch {
-      // ignore quota / privacy errors
+      // ignore
     }
   }, [sidebarWidth])
 
-  const hasUnreadNotif = notifications.some((n) => !n.read)
+  const loadEvents = useCallback(
+    async (anchorDate: Date) => {
+      if (!currentUser) return
 
-  function handleNavigate(direction: 'prev' | 'next') {
-    setCurrentDate((d) => navigateDate(d, calendarView, direction))
-  }
+      setEventsPending(true)
+      try {
+        const windowRange = getEventWindow(anchorDate)
+        const items: Event[] = []
+        let cursor: string | null = null
 
-  function handleToday() {
-    setCurrentDate(getTodayStart())
-  }
+        do {
+          const pageData = await clientRef.current.listEvents({
+            ...windowRange,
+            timezone: currentUser.timezone,
+            cursor,
+            limit: 100,
+          })
 
-  function handleEventClick(event: Event) {
-    setSelectedEventId(event.id)
-  }
+          items.push(...pageData.items.map(toEventModel))
+          cursor = pageData.page.nextCursor
+        } while (cursor)
 
-  function navigateToPage(p: Page) {
-    setPage(p)
-    setIsMobileNavOpen(false)
-  }
+        setEvents(items)
+      } catch (error) {
+        console.error(error)
+      } finally {
+        setEventsPending(false)
+      }
+    },
+    [currentUser],
+  )
 
-  function createEvent(input: {
-    title: string
-    description?: string
-    startTime: Date
-    endTime?: Date
-    location?: string
-    priority: 'low' | 'normal' | 'high'
-    allDay?: boolean
-    tags?: string[]
-  }) {
-    const now = new Date()
-    const id = `event-${now.getTime().toString(36)}-${Math.random().toString(36).slice(2, 6)}`
-    const reminders: Reminder[] = [
-      { id: `${id}-r1`, eventId: id, minutesBefore: 15, method: 'push' },
-    ]
-    const newEvent: Event = {
-      id,
-      title: input.title,
-      description: input.description,
-      startTime: input.startTime,
-      endTime: input.endTime,
-      allDay: input.allDay,
-      timezone: 'Asia/Shanghai',
-      location: input.location,
-      reminders,
-      priority: input.priority,
-      tags: input.tags,
-      source: 'manual',
-      createdAt: now,
-      updatedAt: now,
+  const loadNotifications = useCallback(async () => {
+    if (!currentUser) return
+
+    setNotificationsPending(true)
+    try {
+      const items = await clientRef.current.listNotifications()
+      setNotifications(items.map(toNotificationModel))
+    } catch (error) {
+      console.error(error)
+    } finally {
+      setNotificationsPending(false)
     }
-    setEvents((arr) => [...arr, newEvent])
+  }, [currentUser])
+
+  useEffect(() => {
+    if (!sessionRef.current) {
+      setBootPending(false)
+      return
+    }
+
+    let cancelled = false
+
+    void (async () => {
+      try {
+        const profile = await clientRef.current.getMe()
+
+        if (cancelled) return
+
+        const user = toUserModel(profile)
+        setCurrentUser(user)
+        sessionRef.current = {
+          ...sessionRef.current!,
+          user,
+        }
+        saveSession(sessionRef.current)
+      } catch {
+        if (cancelled) return
+        sessionRef.current = null
+        clearSession()
+        setCurrentUser(null)
+      } finally {
+        if (!cancelled) {
+          setBootPending(false)
+        }
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!currentUser) {
+      setEvents([])
+      setNotifications([])
+      if (realtimeRef.current) {
+        realtimeRef.current.close()
+        realtimeRef.current = null
+      }
+      return
+    }
+
+    void loadEvents(currentDate)
+    void loadNotifications()
+  }, [currentUser, currentDate, loadEvents, loadNotifications])
+
+  useEffect(() => {
+    if (!currentUser) return
+
+    const socket = clientRef.current.connectRealtime((message) => {
+      if (isRealtimeEvent(message)) {
+        void loadEvents(currentDate)
+      } else if (message.type === 'notification.new') {
+        void loadNotifications()
+      }
+    })
+
+    realtimeRef.current = socket
+
+    socket.addEventListener('close', () => {
+      if (realtimeRef.current === socket) {
+        realtimeRef.current = null
+      }
+    })
+
+    return () => {
+      socket.close()
+      if (realtimeRef.current === socket) {
+        realtimeRef.current = null
+      }
+    }
+  }, [currentUser, currentDate, loadEvents, loadNotifications])
+
+  async function persistSession(session: {
+    accessToken: string
+    refreshToken: string
+    user: User
+  }) {
+    sessionRef.current = session
+    saveSession(session)
+    setCurrentUser(session.user)
+    setAuthError(null)
   }
 
-  function updateEvent(id: string, patch: Partial<Event>) {
-    setEvents((arr) =>
-      arr.map((e) => (e.id === id ? { ...e, ...patch, updatedAt: new Date() } : e)),
-    )
+  async function handleLogin(input: { email: string; password: string }) {
+    setAuthPending(true)
+    setAuthError(null)
+    try {
+      const payload = await clientRef.current.login(input)
+      await persistSession({
+        accessToken: payload.accessToken,
+        refreshToken: payload.refreshToken,
+        user: toUserModel(payload.user),
+      })
+    } catch (error) {
+      setAuthError(toErrorMessage(error))
+    } finally {
+      setAuthPending(false)
+    }
   }
 
-  function deleteEvent(id: string) {
-    setEvents((arr) => arr.filter((e) => e.id !== id))
-    setSelectedEventId((cur) => (cur === id ? null : cur))
+  async function handleRegister(input: { name: string; email: string; password: string }) {
+    setAuthPending(true)
+    setAuthError(null)
+    try {
+      const payload = await clientRef.current.register(input)
+      await persistSession({
+        accessToken: payload.accessToken,
+        refreshToken: payload.refreshToken,
+        user: toUserModel(payload.user),
+      })
+    } catch (error) {
+      setAuthError(toErrorMessage(error))
+    } finally {
+      setAuthPending(false)
+    }
+  }
+
+  async function handleLogout() {
+    try {
+      await clientRef.current.logout()
+    } catch {
+      // ignore
+    }
+
+    if (realtimeRef.current) {
+      realtimeRef.current.close()
+      realtimeRef.current = null
+    }
+
+    sessionRef.current = null
+    clearSession()
+    setCurrentUser(null)
+    setSelectedEventId(null)
+    setPage('calendar')
+  }
+
+  async function handleUpdateSettings(input: Partial<UserSettings>) {
+    if (!currentUser) return
+
+    setSettingsSaving(true)
+    try {
+      const profile = await clientRef.current.updateSettings(input)
+      const user = toUserModel(profile)
+      setCurrentUser(user)
+      if (sessionRef.current) {
+        sessionRef.current = {
+          ...sessionRef.current,
+          user,
+        }
+        saveSession(sessionRef.current)
+      }
+    } catch (error) {
+      console.error(error)
+    } finally {
+      setSettingsSaving(false)
+    }
+  }
+
+  async function handleDraftSubmit(input: {
+    sourceText?: string
+    draftId?: string
+    userInput?: string
+  }): Promise<V1EventDraftRecord | null> {
+    setCreatePending(true)
+    setCreateError(null)
+
+    try {
+      if (input.sourceText) {
+        const draft = await clientRef.current.createDraft({
+          sourceText: input.sourceText,
+          source: 'text',
+          timezone: currentUser?.timezone ?? 'Asia/Shanghai',
+          referenceAt: new Date().toISOString(),
+        })
+
+        if (draft.canSave) {
+          await clientRef.current.confirmDraft(draft.draftId)
+          await loadEvents(currentDate)
+          setShowCreateModal(false)
+          return null
+        }
+
+        return draft
+      }
+
+      if (input.draftId && input.userInput) {
+        const draft = await clientRef.current.updateDraft(input.draftId, {
+          userInput: input.userInput,
+          referenceAt: new Date().toISOString(),
+        })
+
+        if (draft.canSave) {
+          await clientRef.current.confirmDraft(draft.draftId)
+          await loadEvents(currentDate)
+          setShowCreateModal(false)
+          return null
+        }
+
+        return draft
+      }
+
+      return null
+    } catch (error) {
+      setCreateError(toErrorMessage(error))
+      return null
+    } finally {
+      setCreatePending(false)
+    }
+  }
+
+  async function handleUpdateEvent(eventId: string, patch: Partial<Event>) {
+    const current = events.find((event) => event.id === eventId)
+    if (!current) return
+
+    const nextEvent: Event = {
+      ...current,
+      ...patch,
+      reminders: patch.reminders ?? current.reminders,
+      attendees: patch.attendees ?? current.attendees,
+      recurrence: patch.recurrence ?? current.recurrence,
+      updatedAt: new Date(),
+    }
+
+    try {
+      const updated = await clientRef.current.updateEvent(eventId, toUpdateEventRequest(nextEvent))
+      const updatedModel = toEventModel(updated)
+      setEvents((currentEvents) =>
+        currentEvents.map((event) => (event.id === eventId ? updatedModel : event)),
+      )
+    } catch (error) {
+      console.error(error)
+    }
+  }
+
+  async function handleDeleteEvent(eventId: string) {
+    try {
+      await clientRef.current.deleteEvent(eventId)
+      setEvents((currentEvents) => currentEvents.filter((event) => event.id !== eventId))
+      setSelectedEventId((currentValue) => (currentValue === eventId ? null : currentValue))
+    } catch (error) {
+      console.error(error)
+    }
+  }
+
+  async function toggleNotifPanel() {
+    const next = !showNotifPanel
+    setShowNotifPanel(next)
+
+    if (next) {
+      if (!notificationsPending) {
+        await loadNotifications()
+      }
+
+      const unread = notifications.filter((notification) => !notification.read)
+      if (unread.length > 0) {
+        await Promise.all(
+          unread.map(async (notification) => {
+            try {
+              await clientRef.current.markNotificationRead(notification.id, true)
+            } catch {
+              // ignore
+            }
+          }),
+        )
+        setNotifications((currentItems) =>
+          currentItems.map((notification) => ({ ...notification, read: true })),
+        )
+      }
+    }
   }
 
   function toggleTagVisibility(tag: string) {
-    setHiddenTags((prev) => {
-      const next = new Set(prev)
+    setHiddenTags((currentItems) => {
+      const next = new Set(currentItems)
       if (next.has(tag)) next.delete(tag)
       else next.add(tag)
       return next
@@ -775,72 +1098,38 @@ function App() {
   }
 
   function focusOnTag(tag: string) {
-    // "Focus this tag" — hide every other tag. Untagged events stay visible
-    // per product decision.
-    setHiddenTags(new Set(tagSuggestions.filter((t) => t !== tag)))
+    setHiddenTags(new Set(tagSuggestions.filter((item) => item !== tag)))
   }
 
-  function renameTag(from: string, to: string) {
-    const target = to.trim()
-    if (!target || target === from) return
-    setEvents((arr) =>
-      arr.map((e) => {
-        if (!e.tags) return e
-        if (!e.tags.includes(from)) return e
-        const next = Array.from(new Set(e.tags.map((t) => (t === from ? target : t))))
-        return { ...e, tags: next, updatedAt: new Date() }
-      }),
-    )
-    setHiddenTags((prev) => {
-      const next = new Set(prev)
-      const wasHidden = next.delete(from)
-      if (wasHidden) next.add(target)
-      return next
-    })
+  function handleEventClick(event: Event) {
+    setSelectedEventId(event.id)
   }
 
-  function deleteTag(tag: string) {
-    setEvents((arr) =>
-      arr.map((e) => {
-        if (!e.tags || !e.tags.includes(tag)) return e
-        const filtered = e.tags.filter((t) => t !== tag)
-        return {
-          ...e,
-          tags: filtered.length > 0 ? filtered : undefined,
-          updatedAt: new Date(),
-        }
-      }),
-    )
-    setHiddenTags((prev) => {
-      if (!prev.has(tag)) return prev
-      const next = new Set(prev)
-      next.delete(tag)
-      return next
-    })
+  function navigateToPage(nextPage: Page) {
+    setPage(nextPage)
+    setIsMobileNavOpen(false)
   }
 
-  function toggleNotifPanel() {
-    setShowNotifPanel((prev) => {
-      const next = !prev
-      if (next && hasUnreadNotif) {
-        setNotifications((arr) => arr.map((n) => ({ ...n, read: true })))
-      }
-      return next
-    })
+  function handleNavigate(direction: 'prev' | 'next') {
+    setCurrentDate((date) => navigateDate(date, calendarView, direction))
   }
 
-  function startSidebarResize(e: ReactMouseEvent<HTMLDivElement>) {
-    e.preventDefault()
-    const startX = e.clientX
+  function handleToday() {
+    setCurrentDate(getTodayStart())
+  }
+
+  function startSidebarResize(event: ReactMouseEvent<HTMLDivElement>) {
+    event.preventDefault()
+    const startX = event.clientX
     const startWidth = sidebarWidth
     setIsResizingSidebar(true)
 
-    function onMove(ev: MouseEvent) {
-      const next = Math.min(
+    function onMove(nextEvent: MouseEvent) {
+      const nextWidth = Math.min(
         SIDEBAR_MAX_WIDTH,
-        Math.max(SIDEBAR_MIN_WIDTH, startWidth + ev.clientX - startX),
+        Math.max(SIDEBAR_MIN_WIDTH, startWidth + nextEvent.clientX - startX),
       )
-      setSidebarWidth(next)
+      setSidebarWidth(nextWidth)
     }
 
     function onUp() {
@@ -861,26 +1150,49 @@ function App() {
     setSidebarWidth(SIDEBAR_DEFAULT_WIDTH)
   }
 
+  if (bootPending) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#f6f7f9]">
+        <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-5 py-4 text-sm text-slate-600 shadow-sm">
+          <LoaderCircle className="animate-spin text-teal-600" size={18} />
+          正在恢复会话并连接真实后端…
+        </div>
+      </div>
+    )
+  }
+
+  if (!currentUser) {
+    return (
+      <AuthScreen
+        errorMessage={authError}
+        isSubmitting={authPending}
+        onLogin={handleLogin}
+        onRegister={handleRegister}
+      />
+    )
+  }
+
+  const mutationDisabledReason = selectedEvent?.recurrence
+    ? '重复事件当前仅支持只读展示，编辑和删除将在补齐范围选择 UI 后开放。'
+    : undefined
+
   return (
     <div className="flex h-screen bg-[#f6f7f9]">
-      {/* Mobile sidebar backdrop */}
-      {isMobileNavOpen && (
+      {isMobileNavOpen ? (
         <button
           aria-label="关闭菜单"
           className="fixed inset-0 z-30 bg-black/40 md:hidden"
           onClick={() => setIsMobileNavOpen(false)}
           type="button"
         />
-      )}
+      ) : null}
 
-      {/* Sidebar */}
       <aside
         className={`${
           isMobileNavOpen ? 'fixed inset-y-0 left-0 z-40 flex' : 'hidden md:flex'
         } shrink-0 flex-col overflow-hidden border-r border-slate-200 bg-white md:relative`}
         style={{ width: isMobileNavOpen ? SIDEBAR_DEFAULT_WIDTH : sidebarWidth }}
       >
-        {/* Logo */}
         <div className="flex shrink-0 items-center gap-2 px-4 py-4">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-900 text-white">
             <CalendarDays size={18} />
@@ -888,19 +1200,20 @@ function App() {
           <span className="text-lg font-bold text-slate-900">Vocalendar</span>
         </div>
 
-        {/* Create button */}
         <div className="shrink-0 px-3 pb-3">
           <button
             className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-teal-700"
-            onClick={() => setShowCreateModal(true)}
+            onClick={() => {
+              setCreateError(null)
+              setShowCreateModal(true)
+            }}
             type="button"
           >
             <Plus size={18} />
-            创建事件
+            文本草稿创建
           </button>
         </div>
 
-        {/* Nav */}
         <nav className="shrink-0 space-y-1.5 px-3">
           {[
             { id: 'calendar' as Page, label: '日历', icon: CalendarDays },
@@ -921,36 +1234,39 @@ function App() {
           ))}
         </nav>
 
-        {/* Mini Calendar - only show on calendar page. Scrolls internally if
-            the viewport is too short to fit MiniCal + Upcoming in full. */}
-        {page === 'calendar' && (
+        {page === 'calendar' ? (
           <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 pt-4 pb-3">
             <MiniCalendar
               currentDate={currentDate}
               events={visibleEvents}
-              onSelectDate={(d) => {
-                setCurrentDate(d)
+              onSelectDate={(date) => {
+                setCurrentDate(date)
                 setCalendarView('day')
               }}
             />
             <UpcomingEvents events={visibleEvents} onEventClick={handleEventClick} />
           </div>
-        )}
+        ) : null}
 
-        {/* User */}
         <div className="mt-auto shrink-0 border-t border-slate-100 p-3">
           <div className="flex items-center gap-2 rounded-lg px-2 py-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-teal-100 text-xs font-bold text-teal-700">
-              {mockUser.name[0]}
+              {currentUser.name[0]}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-xs font-semibold text-slate-800">{mockUser.name}</p>
-              <p className="truncate text-[10px] text-slate-500">{mockUser.email}</p>
+              <p className="truncate text-xs font-semibold text-slate-800">{currentUser.name}</p>
+              <p className="truncate text-[10px] text-slate-500">{currentUser.email}</p>
             </div>
+            <button
+              className="rounded-lg px-2 py-1 text-[11px] font-medium text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
+              onClick={() => void handleLogout()}
+              type="button"
+            >
+              退出
+            </button>
           </div>
         </div>
 
-        {/* Resize handle (desktop only) */}
         <div
           aria-label="拖动以调整侧边栏宽度，双击恢复默认"
           aria-orientation="vertical"
@@ -967,10 +1283,8 @@ function App() {
         />
       </aside>
 
-      {/* Main Content */}
       <main className="flex min-w-0 flex-1 flex-col">
-        {/* Top bar */}
-        {page === 'calendar' && (
+        {page === 'calendar' ? (
           <header className="flex items-center justify-between gap-2 border-b border-slate-200 bg-white px-4 py-3 md:px-6">
             <div className="flex min-w-0 items-center gap-2">
               <button
@@ -993,13 +1307,13 @@ function App() {
               <button
                 aria-label={hasUnreadNotif ? '通知（有未读）' : '通知'}
                 className="relative ml-2 flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50"
-                onClick={toggleNotifPanel}
+                onClick={() => void toggleNotifPanel()}
                 type="button"
               >
                 <Bell size={18} />
-                {hasUnreadNotif && (
+                {hasUnreadNotif ? (
                   <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-rose-500" />
-                )}
+                ) : null}
               </button>
               <button
                 aria-label="语音助手"
@@ -1011,9 +1325,7 @@ function App() {
               </button>
             </div>
           </header>
-        )}
-
-        {page !== 'calendar' && (
+        ) : (
           <header className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3 md:px-6">
             <div className="flex items-center gap-2">
               <button
@@ -1025,8 +1337,7 @@ function App() {
                 <Menu size={18} />
               </button>
               <h1 className="text-xl font-bold text-slate-900">
-                {page === 'voice' && '语音助手'}
-                {page === 'settings' && '设置'}
+                {page === 'voice' ? '语音助手' : '设置'}
               </h1>
             </div>
             <div className="flex items-center gap-2">
@@ -1042,7 +1353,7 @@ function App() {
           </header>
         )}
 
-        {page === 'calendar' && (
+        {page === 'calendar' ? (
           <TagFilterBar
             allTags={tagSuggestions}
             hiddenTags={sanitizedHiddenTags}
@@ -1050,71 +1361,83 @@ function App() {
             onFocus={focusOnTag}
             onToggle={toggleTagVisibility}
           />
-        )}
+        ) : null}
 
-        {/* Content area */}
         <div className="flex-1 overflow-hidden">
-          {page === 'calendar' && (
+          {page === 'calendar' ? (
             <div className="h-full p-4">
               <div className="h-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-                <CalendarContainer
-                  currentDate={currentDate}
-                  events={visibleEvents}
-                  onEventClick={handleEventClick}
-                  view={calendarView}
-                />
+                {eventsPending ? (
+                  <div className="flex h-full items-center justify-center gap-3 text-sm text-slate-500">
+                    <LoaderCircle className="animate-spin text-teal-600" size={18} />
+                    正在加载真实事件数据…
+                  </div>
+                ) : (
+                  <CalendarContainer
+                    currentDate={currentDate}
+                    events={visibleEvents}
+                    onEventClick={handleEventClick}
+                    view={calendarView}
+                  />
+                )}
               </div>
             </div>
-          )}
+          ) : null}
 
-          {page === 'voice' && (
+          {page === 'voice' ? (
             <div className="h-full overflow-y-auto p-6">
               <VoicePage />
             </div>
-          )}
+          ) : null}
 
-          {page === 'settings' && (
+          {page === 'settings' ? (
             <div className="h-full overflow-y-auto p-6">
               <SettingsPage
                 events={events}
                 hiddenTags={sanitizedHiddenTags}
-                onDeleteTag={deleteTag}
-                onRenameTag={renameTag}
+                onUpdateSettings={handleUpdateSettings}
+                settingsSaving={settingsSaving}
+                user={currentUser}
               />
             </div>
-          )}
+          ) : null}
         </div>
       </main>
 
-      {/* Modals */}
-      {selectedEvent && (
+      {selectedEvent ? (
         <EventModal
           event={selectedEvent}
+          mutationDisabledReason={mutationDisabledReason}
           onClose={() => setSelectedEventId(null)}
-          onDelete={() => deleteEvent(selectedEvent.id)}
+          onDelete={
+            selectedEvent.recurrence ? undefined : () => void handleDeleteEvent(selectedEvent.id)
+          }
           onTagClick={focusOnTag}
-          onUpdate={(patch) => updateEvent(selectedEvent.id, patch)}
+          onUpdate={
+            selectedEvent.recurrence
+              ? undefined
+              : (patch) => {
+                  void handleUpdateEvent(selectedEvent.id, patch)
+                }
+          }
           tagSuggestions={tagSuggestions}
         />
-      )}
+      ) : null}
 
-      {showCreateModal && (
-        <CreateEventModal
-          initialDate={currentDate}
+      {showCreateModal ? (
+        <DraftComposerModal
+          errorMessage={createError}
+          isSubmitting={createPending}
           onClose={() => setShowCreateModal(false)}
-          onCreate={(input) => {
-            createEvent(input)
-            setShowCreateModal(false)
-          }}
-          tagSuggestions={tagSuggestions}
+          onSubmit={handleDraftSubmit}
         />
-      )}
+      ) : null}
 
-      {showVoiceModal && <VoiceModal onClose={() => setShowVoiceModal(false)} />}
+      {showVoiceModal ? <VoiceModal onClose={() => setShowVoiceModal(false)} /> : null}
 
-      {showNotifPanel && (
+      {showNotifPanel ? (
         <NotificationPanel notifications={notifications} onClose={() => setShowNotifPanel(false)} />
-      )}
+      ) : null}
     </div>
   )
 }

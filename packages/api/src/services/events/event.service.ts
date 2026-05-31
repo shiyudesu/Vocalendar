@@ -53,7 +53,15 @@ export async function createEventFromDraft(
     }
   }
 
-  const event = draftToEventRecord(draft)
+  const user = userId ? await dependencies.usersRepository.findUserById(userId) : null
+  const event = draftToEventRecord(
+    draft,
+    user
+      ? {
+          defaultReminderMinutes: user.settings.defaultReminderMinutes,
+        }
+      : undefined,
+  )
   const saved = await dependencies.eventsRepository.saveEvent(event)
 
   await dependencies.realtimeRepository.push(

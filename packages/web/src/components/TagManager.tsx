@@ -1,7 +1,7 @@
 import { Check, Pencil, Trash2, X } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
-import type { Event } from '../data/mock'
+import type { Event } from '../lib/models'
 import { getTagPalette } from '../lib/tagPalette'
 import { normalizeTag } from '../lib/tags'
 import { TagChip } from './TagChip'

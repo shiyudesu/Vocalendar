@@ -176,6 +176,59 @@ describe('notifications and reminders routes', () => {
 
     await runtime.dispose()
   })
+
+  test('creates notifications for newly created events using the user default reminder setting', async () => {
+    eventMemoryRepository.reset()
+    userMemoryRepository.reset()
+    const runtime = await createRuntimeDependencies(testEnv)
+    const app = createApp({ runtime })
+    const accessToken = await registerAndGetAccessToken(app, 'notifications-default-reminder@example.com')
+
+    const settingsResponse = await app.request('/api/v1/me/settings', {
+      method: 'PATCH',
+      headers: {
+        authorization: `Bearer ${accessToken}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        defaultReminderMinutes: 30,
+      }),
+    })
+
+    expect(settingsResponse.status).toBe(200)
+
+    const eventId = await createEvent(app, accessToken)
+
+    await processReminderQueue(runtime, '2026-05-30T06:30:00.000Z')
+
+    const listResponse = await app.request('/api/v1/notifications', {
+      headers: {
+        authorization: `Bearer ${accessToken}`,
+      },
+    })
+    const listPayload = (await listResponse.json()) as NotificationListPayload
+
+    expect(listResponse.status).toBe(200)
+    expect(listPayload.data.items).toHaveLength(1)
+    expect(listPayload.data.items[0]).toEqual(
+      expect.objectContaining({
+        read: false,
+      }),
+    )
+    expect(listPayload.data.items[0]?.title).toContain('提醒')
+    expect(listPayload.data.items[0]?.message).toContain('30 分钟后开始')
+
+    const deleteResponse = await app.request(`/api/v1/events/${eventId}`, {
+      method: 'DELETE',
+      headers: {
+        authorization: `Bearer ${accessToken}`,
+      },
+    })
+
+    expect(deleteResponse.status).toBe(200)
+
+    await runtime.dispose()
+  })
 })
 
 async function registerAndGetAccessToken(

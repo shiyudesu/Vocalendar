@@ -2,11 +2,19 @@ import type { EventRecord, V1EventDraftRecord as EventDraft } from '@vocalendar/
 
 import { nowIso } from '../../utils/clock.js'
 
-export function draftToEventRecord(draft: EventDraft): EventRecord {
+type DraftToEventRecordOptions = {
+  defaultReminderMinutes: number
+}
+
+export function draftToEventRecord(
+  draft: EventDraft,
+  options?: DraftToEventRecordOptions,
+): EventRecord {
   const timestamp = nowIso()
+  const eventId = `evt_${crypto.randomUUID()}`
 
   return {
-    id: `evt_${crypto.randomUUID()}`,
+    id: eventId,
     userId: draft.userId ?? 'usr_dev',
     title: draft.parsed.title as string,
     description: null,
@@ -16,7 +24,15 @@ export function draftToEventRecord(draft: EventDraft): EventRecord {
     timezone: draft.parsed.timezone,
     location: draft.parsed.location,
     recurrence: null,
-    reminders: [],
+    reminders: [
+      {
+        id: `rem_${crypto.randomUUID()}`,
+        eventId,
+        minutesBefore: options?.defaultReminderMinutes ?? 15,
+        method: 'push',
+        sentAt: null,
+      },
+    ],
     attendees: [],
     priority: 'normal',
     tags: [],

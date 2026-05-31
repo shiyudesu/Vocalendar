@@ -6,8 +6,8 @@ import {
   getEventsForMonth,
   getEventsForWeek,
   getPriorityColor,
-} from '../data/mock'
-import type { Event } from '../data/mock'
+} from '../lib/calendar'
+import type { Event } from '../lib/models'
 import { getTagPalette, UNTAGGED_PALETTE } from '../lib/tagPalette'
 import { TagChip } from './TagChip'
 

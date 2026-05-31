@@ -125,21 +125,29 @@ export function createVoiceRoutes(runtime: RuntimeDependencies) {
     }
   })
 
-  voiceRoutes.get('/asr/ws', async (c) => {
-    const accessToken = c.req.query('accessToken')
+  voiceRoutes.get(
+    '/asr/ws',
+    async (c, next) => {
+      const accessToken = c.req.query('accessToken')
 
-    if (!accessToken) {
-      return unauthorizedWsResponse('Access token is required.')
-    }
+      if (!accessToken) {
+        return unauthorizedWsResponse('Access token is required.')
+      }
 
-    const payload = await runtime.tokens.verifyAccessToken(accessToken).catch(() => null)
+      const payload = await runtime.tokens.verifyAccessToken(accessToken).catch(() => null)
 
-    if (!payload) {
-      return unauthorizedWsResponse('Access token is invalid.')
-    }
+      if (!payload) {
+        return unauthorizedWsResponse('Access token is invalid.')
+      }
 
-    return upgradeWebSocket(c, {
-      onMessage(event, ws) {
+      c.set('wsUserId', payload.sub)
+      await next()
+    },
+    upgradeWebSocket((c) => {
+      const userId = c.get('wsUserId') as string
+
+      return {
+        onMessage(event, ws) {
         const context = ws as unknown as VoiceWsContext
         const finishRealtimeSession = async (sessionId: string) => {
           await currentRealtimeSession(context)?.finish()
@@ -164,7 +172,7 @@ export function createVoiceRoutes(runtime: RuntimeDependencies) {
                 },
                 createdAt: nowIso(),
               },
-              payload.sub,
+              userId,
             )
           }
 
@@ -341,8 +349,9 @@ export function createVoiceRoutes(runtime: RuntimeDependencies) {
           })
         }
       },
-    })
-  })
+    }
+  }),
+)
 
   voiceRoutes.post('/tts', async (c) => {
     const body = await c.req.json().catch(() => null)

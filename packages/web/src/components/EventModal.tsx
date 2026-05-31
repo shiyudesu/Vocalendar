@@ -1,8 +1,8 @@
 import { Bell, Clock, MapPin, Pencil, Repeat, Tag, Trash2, Users, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
-import { getPriorityColor } from '../data/mock'
-import type { Attendee, Event, RecurrenceRule, Reminder } from '../data/mock'
+import { getPriorityColor } from '../lib/calendar'
+import type { Attendee, Event, RecurrenceRule, Reminder } from '../lib/models'
 import { TagChip } from './TagChip'
 import { TagInput } from './TagInput'
 
@@ -61,6 +61,7 @@ export function EventModal({
   onDelete,
   onTagClick,
   tagSuggestions = [],
+  mutationDisabledReason,
 }: {
   event: Event
   onClose: () => void
@@ -68,6 +69,7 @@ export function EventModal({
   onDelete?: () => void
   onTagClick?: (tag: string) => void
   tagSuggestions?: string[]
+  mutationDisabledReason?: string
 }) {
   const [isEditing, setIsEditing] = useState(false)
   const [editForm, setEditForm] = useState({
@@ -82,6 +84,7 @@ export function EventModal({
   })
 
   function startEditing() {
+    if (!onUpdate) return
     setEditForm({
       title: event.title,
       description: event.description || '',
@@ -317,28 +320,31 @@ export function EventModal({
               <h3 className="text-xl font-bold text-slate-900">{event.title}</h3>
             </div>
             <div className="flex items-center gap-1">
-              <button
-                aria-label="编辑"
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 transition hover:bg-white/60 hover:text-slate-700"
-                onClick={startEditing}
-                type="button"
-              >
-                <Pencil size={16} />
-              </button>
-              <button
-                aria-label="删除"
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 transition hover:bg-white/60 hover:text-rose-600"
-                onClick={() => {
-                  if (!onDelete) return
-                  if (window.confirm(`确定要删除事件「${event.title}」吗？此操作无法撤销。`)) {
-                    onDelete()
-                    onClose()
-                  }
-                }}
-                type="button"
-              >
-                <Trash2 size={16} />
-              </button>
+              {onUpdate ? (
+                <button
+                  aria-label="编辑"
+                  className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 transition hover:bg-white/60 hover:text-slate-700"
+                  onClick={startEditing}
+                  type="button"
+                >
+                  <Pencil size={16} />
+                </button>
+              ) : null}
+              {onDelete ? (
+                <button
+                  aria-label="删除"
+                  className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 transition hover:bg-white/60 hover:text-rose-600"
+                  onClick={() => {
+                    if (window.confirm(`确定要删除事件「${event.title}」吗？此操作无法撤销。`)) {
+                      onDelete()
+                      onClose()
+                    }
+                  }}
+                  type="button"
+                >
+                  <Trash2 size={16} />
+                </button>
+              ) : null}
               <button
                 aria-label="关闭"
                 className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-white/60 hover:text-slate-600"
@@ -356,6 +362,11 @@ export function EventModal({
 
         {/* Body */}
         <div className="space-y-1 px-6 py-4">
+          {mutationDisabledReason ? (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+              {mutationDisabledReason}
+            </div>
+          ) : null}
           {/* Time */}
           <div className="flex items-start gap-3 py-2">
             <Clock size={18} className="mt-0.5 shrink-0 text-slate-400" />
