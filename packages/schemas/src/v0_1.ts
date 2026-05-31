@@ -14,7 +14,7 @@ function isValidIanaTimezone(timezone: string) {
 const timezoneSchema = z.string().min(1).refine(isValidIanaTimezone, {
   message: 'Invalid IANA timezone.',
 })
-const isoDateTimeSchema = z.string().datetime({ offset: true })
+const isoDateTimeSchema = z.string().datetime({ offset: true, local: true })
 
 export const eventDraftParsedSchema = z.object({
   title: z.string().min(1).nullable(),
