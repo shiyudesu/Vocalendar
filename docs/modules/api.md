@@ -109,7 +109,7 @@
 - WebSocket 同步已落库 realtime outbox，并已接入 Redis pub/sub 路径；但仍未完成 docker-compose / 多实例 live 广播验证
 - 无离线同步协议实现
 - 重复事件范围更新 / 删除已实现 `single|following|all` 真实语义，使用 `occurrenceStartTime` 锚定命中实例
-- 前端语音流程仍是 mock
+- 前端语音流程已接入真实浏览器录音 + WebSocket 实时 ASR，TTS 语音反馈与语音历史已上线
 
 ## 5. 开发任务拆分
 
@@ -121,9 +121,9 @@
 | `#16` | 提醒数组更新 / 通知基础接口 | V1.0 | Schemas | ✅ 已完成 |
 | `#17` | 认证与账户接口 | MVP | Schemas | ✅ 已完成 |
 | `#18` | 重复事件范围更新 / 删除接口 | V1.0 | Schemas / 仓储 | ✅ 已完成 |
-| `#19` | `POST /voice/asr` + `GET /voice/asr/ws` 与 provider 抽象 | V1.0 | Voice provider | 🟡 待 live 验证 |
-| `#20` | `POST /voice/tts` 与设置联动 | V1.0 | TTS provider | 🟡 待 live 验证 |
-| `#21` | `GET /voice/providers` 能力状态接口 | V1.0 | 配置层 | 🟡 待 live 验证 |
+| `#19` | `POST /voice/asr` + `GET /voice/asr/ws` 与 provider 抽象 | V1.0 | Voice provider | ✅ 前端已接入实时 WS |
+| `#20` | `POST /voice/tts` 与设置联动 | V1.0 | TTS provider | ✅ 前端已接入播放 |
+| `#21` | `GET /voice/providers` 能力状态接口 | V1.0 | 配置层 | ✅ 接口已就绪 |
 | `#22` | 语音历史接口 | V1.0 | 仓储 | ✅ 已完成 |
 | `#23` | `POST /intelligence/conflicts` | V1.5 | Parser | ⏳ 待开始 |
 | `#24` | `POST /intelligence/suggestions` | V1.5 | Parser / 历史数据 | ⏳ 待开始 |
