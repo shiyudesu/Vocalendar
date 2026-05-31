@@ -4,6 +4,6 @@ import { webDevOrigins } from '../../config/ports.js'
 
 export const corsMiddleware = cors({
   origin: webDevOrigins,
-  allowMethods: ['GET', 'POST', 'PATCH', 'OPTIONS'],
-  allowHeaders: ['Content-Type'],
+  allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowHeaders: ['Content-Type', 'Authorization'],
 })

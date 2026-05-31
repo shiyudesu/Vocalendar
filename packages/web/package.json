@@ -8,9 +8,11 @@
     "build": "vite build",
     "check": "rslint --type-check . && oxfmt --check .",
     "fix": "rslint --type-check --fix . && oxfmt .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run"
   },
   "dependencies": {
+    "@vocalendar/schemas": "workspace:*",
     "lucide-react": "^1.17.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6"
@@ -30,6 +32,7 @@
     "playwright": "^1.60.0",
     "tailwindcss": "^4.3.0",
     "typescript": "~6.0.3",
-    "vite": "^8.0.14"
+    "vite": "^8.0.14",
+    "vitest": "^4.0.15"
   }
 }

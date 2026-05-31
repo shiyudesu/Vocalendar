@@ -152,7 +152,8 @@ describe('events v1 routes', () => {
     expect(createPayload.data.event.startTime).toBe('2026-05-30T07:00:00.000Z')
     expect(createPayload.data.event.source).toBe('voice')
     expect(createPayload.data.event.priority).toBe('normal')
-    expect(createPayload.data.event.reminders).toEqual([])
+    expect(createPayload.data.event.reminders).toHaveLength(1)
+    expect(createPayload.data.event.reminders[0]?.minutesBefore).toBe(15)
     expect(createPayload.data.event.attendees).toEqual([])
 
     const detailResponse = await app.request(`/api/v1/events/${createPayload.data.event.id}`, {
@@ -246,6 +247,66 @@ describe('events v1 routes', () => {
 
     expect(missingDetailResponse.status).toBe(404)
     expect(missingDetailPayload.error.code).toBe('EVENT_NOT_FOUND')
+
+    await runtime.dispose()
+  })
+
+  test('applies the user default reminder setting when creating a new event', async () => {
+    eventMemoryRepository.reset()
+    userMemoryRepository.reset()
+    const runtime = await createRuntimeDependencies(testEnv)
+    const app = createApp({ runtime })
+    const auth = await registerAndGetAccessToken(app, 'events-default-reminder@example.com')
+
+    const settingsResponse = await app.request('/api/v1/me/settings', {
+      method: 'PATCH',
+      headers: {
+        authorization: `Bearer ${auth.accessToken}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        defaultReminderMinutes: 30,
+      }),
+    })
+
+    expect(settingsResponse.status).toBe(200)
+
+    const draftResponse = await app.request('/api/v1/drafts', {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${auth.accessToken}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        sourceText: '明天下午三点和张总在国贸喝咖啡',
+        timezone: 'Asia/Shanghai',
+        referenceAt: '2026-05-29T02:00:00Z',
+        source: 'text',
+      }),
+    })
+    const draftPayload = (await draftResponse.json()) as {
+      data: { draft: { draftId: string } }
+    }
+
+    const createResponse = await app.request('/api/v1/events', {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${auth.accessToken}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        draftId: draftPayload.data.draft.draftId,
+      }),
+    })
+    const createPayload = (await createResponse.json()) as EventPayload
+
+    expect(createResponse.status).toBe(200)
+    expect(createPayload.data.event.reminders).toHaveLength(1)
+    expect(createPayload.data.event.reminders[0]).toEqual(
+      expect.objectContaining({
+        minutesBefore: 30,
+      }),
+    )
 
     await runtime.dispose()
   })

@@ -15,40 +15,49 @@ type RealtimeWsContext = {
 export function createRealtimeRoutes(runtime: RuntimeDependencies) {
   const realtimeRoutes = new Hono()
 
-  realtimeRoutes.get('/', async (c) => {
-    const accessToken = c.req.query('accessToken')
+  realtimeRoutes.get(
+    '/',
+    async (c, next) => {
+      const accessToken = c.req.query('accessToken')
 
-    if (!accessToken) {
-      return unauthorizedWsResponse('Access token is required.')
-    }
+      if (!accessToken) {
+        return unauthorizedWsResponse('Access token is required.')
+      }
 
-    const payload = await runtime.tokens.verifyAccessToken(accessToken).catch(() => null)
+      const payload = await runtime.tokens.verifyAccessToken(accessToken).catch(() => null)
 
-    if (!payload) {
-      return unauthorizedWsResponse('Access token is invalid.')
-    }
+      if (!payload) {
+        return unauthorizedWsResponse('Access token is invalid.')
+      }
 
-    return upgradeWebSocket(c, {
-      async onOpen(_event, ws) {
-        for (const bufferedEvent of await runtime.repositories.realtime.list(payload.sub)) {
-          ws.send(JSON.stringify(bufferedEvent))
-        }
+      c.set('wsUserId', payload.sub)
+      await next()
+    },
+    upgradeWebSocket((c) => {
+      const userId = c.get('wsUserId') as string
 
-        const unsubscribe = await runtime.repositories.realtime.subscribe((event) => {
-          ws.send(JSON.stringify(event))
-        }, payload.sub)
-        const context = ws as unknown as RealtimeWsContext
-        const cleanup = () => {
-          unsubscribe()
-          context.raw.off('close', cleanup)
-          context.raw.off('error', cleanup)
-        }
+      return {
+        async onOpen(_event, ws) {
+          for (const bufferedEvent of await runtime.repositories.realtime.list(userId)) {
+            ws.send(JSON.stringify(bufferedEvent))
+          }
 
-        context.raw.on('close', cleanup)
-        context.raw.on('error', cleanup)
-      },
-    })
-  })
+          const unsubscribe = await runtime.repositories.realtime.subscribe((event) => {
+            ws.send(JSON.stringify(event))
+          }, userId)
+          const context = ws as unknown as RealtimeWsContext
+          const cleanup = () => {
+            unsubscribe()
+            context.raw.off('close', cleanup)
+            context.raw.off('error', cleanup)
+          }
+
+          context.raw.on('close', cleanup)
+          context.raw.on('error', cleanup)
+        },
+      }
+    }),
+  )
 
   return realtimeRoutes
 }
