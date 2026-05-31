@@ -182,7 +182,10 @@ describe('notifications and reminders routes', () => {
     userMemoryRepository.reset()
     const runtime = await createRuntimeDependencies(testEnv)
     const app = createApp({ runtime })
-    const accessToken = await registerAndGetAccessToken(app, 'notifications-default-reminder@example.com')
+    const accessToken = await registerAndGetAccessToken(
+      app,
+      'notifications-default-reminder@example.com',
+    )
 
     const settingsResponse = await app.request('/api/v1/me/settings', {
       method: 'PATCH',
