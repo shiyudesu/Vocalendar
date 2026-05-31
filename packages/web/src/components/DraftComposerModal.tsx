@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react'
 import type { V1EventDraftRecord } from '../lib/api-types'
 
 interface DraftComposerModalProps {
+  initialSourceText?: string
+  initialDraft?: V1EventDraftRecord | null
   isSubmitting: boolean
   errorMessage: string | null
   onClose: () => void
@@ -15,13 +17,15 @@ interface DraftComposerModalProps {
 }
 
 export function DraftComposerModal({
+  initialSourceText = '',
+  initialDraft = null,
   isSubmitting,
   errorMessage,
   onClose,
   onSubmit,
 }: DraftComposerModalProps) {
-  const [draft, setDraft] = useState<V1EventDraftRecord | null>(null)
-  const [sourceText, setSourceText] = useState('')
+  const [draft, setDraft] = useState<V1EventDraftRecord | null>(initialDraft)
+  const [sourceText, setSourceText] = useState(initialSourceText)
   const [clarification, setClarification] = useState('')
 
   useEffect(() => {
