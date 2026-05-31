@@ -14,11 +14,17 @@
     "@hono/node-server": "2.0.4",
     "@vocalendar/schemas": "workspace:*",
     "chrono-node": "^2.9.0",
-    "hono": "4.12.23"
+    "hono": "4.12.23",
+    "pg": "^8.16.3",
+    "redis": "^5.10.0",
+    "ws": "^8.18.3",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@rslint/core": "^0.5.3",
     "@types/node": "^25.9.1",
+    "@types/pg": "^8.15.6",
+    "@types/ws": "^8.18.1",
     "oxfmt": "^0.52.0",
     "tsdown": "^0.22.0",
     "tsx": "^4.22.3",

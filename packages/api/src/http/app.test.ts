@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest'
 
+import { createRuntimeDependencies } from '../config/runtime.js'
 import { eventMemoryRepository } from '../repositories/events.memory.js'
 import { createApp } from './app.js'
 
@@ -38,10 +39,12 @@ type EventListResponsePayload = {
     items: Array<{
       id: string
       title: string
-      startAt: string
+      startTime: string
       location: string | null
     }>
-    total: number
+    page: {
+      nextCursor: string | null
+    }
   }
 }
 
@@ -50,13 +53,14 @@ type EventResponsePayload = {
     event: {
       id: string
       title: string
-      startAt: string
-      endAt: string | null
+      startTime: string
+      endTime: string | null
       timezone: string
       location: string | null
-      participants: string[]
+      reminders: unknown[]
+      attendees: unknown[]
       source: string
-      status: string
+      priority: string
       createdAt: string
       updatedAt: string
     }
@@ -79,7 +83,17 @@ type ErrorResponsePayload = {
   }
 }
 
-describe('v0.1 API contract', () => {
+describe('draft parsing and event contract', () => {
+  test('creates the v1 app with runtime-backed route factories', async () => {
+    const runtime = await createRuntimeDependencies(testEnv)
+    const app = createApp({ runtime })
+
+    const healthResponse = await app.request('/api/health')
+
+    expect(healthResponse.status).toBe(200)
+    await runtime.dispose()
+  })
+
   test('creates a savable draft for explicit date time and entities', async () => {
     eventMemoryRepository.reset()
     const app = createApp()
@@ -236,7 +250,7 @@ describe('v0.1 API contract', () => {
     expect(payload.meta.timestamp).toMatch(isoTimestampPattern)
   })
 
-  test('updates a draft, creates an event, and returns it in the recent list', async () => {
+  test('updates a draft, creates an event, and returns it in the v1 list response', async () => {
     eventMemoryRepository.reset()
     const app = createApp()
 
@@ -286,28 +300,83 @@ describe('v0.1 API contract', () => {
     expect(eventResponse.status).toBe(200)
     expect(eventPayload.data.event.id).toEqual(expect.any(String))
     expect(eventPayload.data.event.title).toBe('喝咖啡')
-    expect(eventPayload.data.event.startAt).toBe('2026-05-30T07:00:00.000Z')
+    expect(eventPayload.data.event.startTime).toBe('2026-05-30T07:00:00.000Z')
     expect(eventPayload.data.event.location).toBe('国贸')
-    expect(eventPayload.data.event.status).toBe('confirmed')
+    expect(eventPayload.data.event.priority).toBe('normal')
     expect(eventPayload.meta.timestamp).toMatch(isoTimestampPattern)
 
-    const recentResponse = await app.request('/api/v1/events?mode=recent&limit=5')
+    const recentResponse = await app.request('/api/v1/events?limit=5')
     const recentPayload = (await recentResponse.json()) as EventListResponsePayload
 
     expect(recentResponse.status).toBe(200)
-    expect(recentPayload.data.total).toBe(1)
     expect(recentPayload.data.items).toHaveLength(1)
+    expect(recentPayload.data.page.nextCursor).toBeNull()
     expect(recentPayload.data.items[0]).toEqual(
       expect.objectContaining({
         id: eventPayload.data.event.id,
         title: '喝咖啡',
-        startAt: '2026-05-30T07:00:00.000Z',
+        startTime: '2026-05-30T07:00:00.000Z',
         location: '国贸',
       }),
     )
   })
 
-  test('supports recent list pagination with limit and offset', async () => {
+  test('confirms a draft through /drafts/{draftId}/confirm and returns the created event', async () => {
+    eventMemoryRepository.reset()
+    const app = createApp()
+
+    const draftResponse = await app.request('/api/v1/drafts', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        sourceText: '明天和张总喝咖啡',
+        timezone: 'Asia/Shanghai',
+        referenceAt: '2026-05-29T02:00:00Z',
+        source: 'text',
+      }),
+    })
+    const draftPayload = (await draftResponse.json()) as DraftResponsePayload
+
+    await app.request(`/api/v1/drafts/${draftPayload.data.draft.draftId}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        userInput: '下午三点开始',
+        referenceAt: '2026-05-29T02:05:00Z',
+      }),
+    })
+
+    const confirmResponse = await app.request(
+      `/api/v1/drafts/${draftPayload.data.draft.draftId}/confirm`,
+      {
+        method: 'POST',
+      },
+    )
+    const confirmPayload = (await confirmResponse.json()) as EventResponsePayload
+
+    expect(confirmResponse.status).toBe(200)
+    expect(confirmPayload.data.event.id).toEqual(expect.any(String))
+    expect(confirmPayload.data.event.title).toBe('喝咖啡')
+    expect(confirmPayload.data.event.startTime).toBe('2026-05-30T07:00:00.000Z')
+    expect(confirmPayload.meta.timestamp).toMatch(isoTimestampPattern)
+  })
+
+  test('returns DRAFT_NOT_FOUND when confirming a missing draft', async () => {
+    eventMemoryRepository.reset()
+    const app = createApp()
+
+    const response = await app.request('/api/v1/drafts/drf_missing/confirm', {
+      method: 'POST',
+    })
+    const payload = (await response.json()) as ErrorResponsePayload
+
+    expect(response.status).toBe(404)
+    expect(payload.error.code).toBe('DRAFT_NOT_FOUND')
+    expect(payload.error.details).toEqual({ draftId: 'drf_missing' })
+    expect(payload.meta.timestamp).toMatch(isoTimestampPattern)
+  })
+
+  test('supports cursor-based event list pagination', async () => {
     eventMemoryRepository.reset()
     const app = createApp()
 
@@ -335,13 +404,23 @@ describe('v0.1 API contract', () => {
       expect(eventResponse.status).toBe(200)
     }
 
-    const recentResponse = await app.request('/api/v1/events?mode=recent&limit=2&offset=1')
-    const recentPayload = (await recentResponse.json()) as EventListResponsePayload
+    const firstPageResponse = await app.request('/api/v1/events?limit=2')
+    const firstPagePayload = (await firstPageResponse.json()) as EventListResponsePayload
 
-    expect(recentResponse.status).toBe(200)
-    expect(recentPayload.data.total).toBe(3)
-    expect(recentPayload.data.items).toHaveLength(2)
-    expect(recentPayload.data.items.map((item) => item.title)).toEqual(['事件二', '事件一'])
+    expect(firstPageResponse.status).toBe(200)
+    expect(firstPagePayload.data.items).toHaveLength(2)
+    expect(firstPagePayload.data.items.map((item) => item.title)).toEqual(['事件三', '事件二'])
+    expect(firstPagePayload.data.page.nextCursor).toBe(firstPagePayload.data.items[1]?.id)
+
+    const secondPageResponse = await app.request(
+      `/api/v1/events?limit=2&cursor=${firstPagePayload.data.page.nextCursor}`,
+    )
+    const secondPagePayload = (await secondPageResponse.json()) as EventListResponsePayload
+
+    expect(secondPageResponse.status).toBe(200)
+    expect(secondPagePayload.data.items).toHaveLength(1)
+    expect(secondPagePayload.data.items.map((item) => item.title)).toEqual(['事件一'])
+    expect(secondPagePayload.data.page.nextCursor).toBeNull()
   })
 
   test('rejects draft updates when the draft is missing', async () => {
@@ -360,7 +439,7 @@ describe('v0.1 API contract', () => {
     const payload = (await response.json()) as ErrorResponsePayload
 
     expect(response.status).toBe(404)
-    expect(payload.error.code).toBe('NOT_FOUND')
+    expect(payload.error.code).toBe('DRAFT_NOT_FOUND')
     expect(payload.error.details).toEqual({ draftId: 'drf_missing' })
     expect(payload.meta.timestamp).toMatch(isoTimestampPattern)
   })
@@ -399,28 +478,44 @@ describe('v0.1 API contract', () => {
     expect(payload.meta.timestamp).toMatch(isoTimestampPattern)
   })
 
-  test('returns recent events using items and total', async () => {
+  test('returns empty v1 events list using items and page', async () => {
     eventMemoryRepository.reset()
     const app = createApp()
 
-    const response = await app.request('/api/v1/events?mode=recent&limit=5')
+    const response = await app.request('/api/v1/events?limit=5')
     const payload = (await response.json()) as EventListResponsePayload
 
     expect(response.status).toBe(200)
     expect(payload.data).toEqual({
       items: [],
-      total: 0,
+      page: {
+        nextCursor: null,
+      },
     })
   })
 
-  test('rejects unsupported event list modes', async () => {
+  test('rejects unsupported legacy event list fields', async () => {
     eventMemoryRepository.reset()
     const app = createApp()
 
-    const response = await app.request('/api/v1/events?mode=range&limit=5')
+    const response = await app.request('/api/v1/events?offset=1&limit=5')
     const payload = (await response.json()) as ErrorResponsePayload
 
     expect(response.status).toBe(400)
     expect(payload.error.code).toBe('VALIDATION_ERROR')
   })
 })
+
+const testEnv = {
+  PORT: '8061',
+  NODE_ENV: 'test',
+  DATABASE_URL: 'postgresql://vocalendar:vocalendar@127.0.0.1:5432/vocalendar',
+  REDIS_URL: 'redis://127.0.0.1:6379',
+  JWT_ACCESS_SECRET: 'replace-with-a-long-random-access-secret',
+  JWT_REFRESH_SECRET: 'replace-with-a-long-random-refresh-secret',
+  JWT_ACCESS_TTL: '15m',
+  JWT_REFRESH_TTL: '30d',
+  ALIYUN_ACCESS_KEY_ID: 'akid',
+  ALIYUN_ACCESS_KEY_SECRET: 'aksecret',
+  ALIYUN_NLS_APP_KEY: 'appkey',
+} as const
