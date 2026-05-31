@@ -31,7 +31,7 @@ interface ConfirmDeleteState {
 
 export function TagManager({ events, hiddenTags, onRename, onDelete }: TagManagerProps) {
   // Rebuild usage map locally so we don't need to thread it through props.
-  const usage = useMemo(() => {
+  const usage = (() => {
     const map = new Map<string, number>()
     for (const e of events) {
       if (!e.tags) continue
@@ -42,10 +42,10 @@ export function TagManager({ events, hiddenTags, onRename, onDelete }: TagManage
       }
     }
     return map
-  }, [events])
+  })()
 
   const sortedTags = useMemo(
-    () => Array.from(usage.keys()).sort((a, b) => a.localeCompare(b, 'zh-CN')),
+    () => Array.from(usage.keys()).sort((a, b) => a.localeCompare(b, 'zh-CN')) as string[],
     [usage],
   )
 
@@ -144,7 +144,7 @@ export function TagManager({ events, hiddenTags, onRename, onDelete }: TagManage
                           }
                         }}
                         type="text"
-                        value={renaming.draft}
+                        value={renaming?.draft ?? ''}
                       />
                     </div>
                   ) : (

@@ -3,14 +3,10 @@ import {
   CalendarDays,
   ChevronLeft,
   ChevronRight,
-  Clock,
-  Home,
-  MapPin,
   Menu,
   Mic,
   Moon,
   Plus,
-  Search,
   Settings,
   Sun,
   Tag,
@@ -41,10 +37,6 @@ type Page = 'calendar' | 'voice' | 'settings'
 function getTodayStart(): Date {
   const now = new Date()
   return new Date(now.getFullYear(), now.getMonth(), now.getDate())
-}
-
-function formatDateShort(date: Date): string {
-  return `${date.getMonth() + 1}月${date.getDate()}日`
 }
 
 function formatTime(date: Date): string {
