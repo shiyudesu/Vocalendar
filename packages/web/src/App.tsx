@@ -26,11 +26,11 @@ import {
   DateNavigator,
   navigateDate,
 } from './components/CalendarViews'
+import { ChatAssistant } from './components/ChatAssistant'
 import { DraftComposerModal } from './components/DraftComposerModal'
 import { EventModal } from './components/EventModal'
 import { TagFilterBar } from './components/TagFilterBar'
 import { TagManager } from './components/TagManager'
-import { VoiceModal } from './components/VoiceModal'
 import {
   toEventModel,
   toNotificationModel,
@@ -38,9 +38,9 @@ import {
   toUserModel,
 } from './lib/adapters'
 import { ApiClient, ApiClientError } from './lib/api-client'
-import type { RealtimeEnvelope, VoiceHistoryRecord, V1EventDraftRecord } from './lib/api-types'
+import type { RealtimeEnvelope, V1EventDraftRecord } from './lib/api-types'
 import { getEventsForDate } from './lib/calendar'
-import type { Event, NotificationItem, User, UserSettings, VoiceHistoryItem } from './lib/models'
+import type { Event, NotificationItem, User, UserSettings } from './lib/models'
 import { clearSession, loadSession, saveSession } from './lib/session'
 import { getAllTagNames } from './lib/tags'
 
@@ -114,21 +114,6 @@ function isRealtimeEvent(message: RealtimeEnvelope) {
     message.type === 'event.updated' ||
     message.type === 'event.deleted'
   )
-}
-
-function toVoiceHistoryModel(record: VoiceHistoryRecord): VoiceHistoryItem {
-  const text =
-    record.kind === 'asr'
-      ? String((record.resultSummary as { text?: string }).text ?? '')
-      : String((record.requestSummary as { text?: string }).text ?? '')
-  const result = record.kind === 'asr' ? '语音识别' : '语音播报'
-  return {
-    id: record.id,
-    text: text || '（无内容）',
-    result,
-    timestamp: new Date(record.createdAt),
-    status: 'success',
-  }
 }
 
 function NotificationPanel({
@@ -621,63 +606,6 @@ function ReadonlyField({ label, value }: { label: string; value: string }) {
   )
 }
 
-interface VoicePageProps {
-  accessToken: string | null
-  language: string
-  voiceHistory: VoiceHistoryItem[]
-  onTranscriptReady: (transcript: string) => void
-}
-
-function VoicePage({ accessToken, language, voiceHistory, onTranscriptReady }: VoicePageProps) {
-  const [showVoiceModal, setShowVoiceModal] = useState(false)
-
-  return (
-    <div className="mx-auto max-w-2xl">
-      <div className="mb-8 text-center">
-        <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-teal-50">
-          <Mic size={36} className="text-teal-600" />
-        </div>
-        <h2 className="text-2xl font-bold text-slate-900">语音助手</h2>
-        <p className="mt-2 text-slate-500">用自然语言快速创建、查询和修改日程</p>
-      </div>
-
-      <button
-        className="mx-auto mb-8 flex h-24 w-24 items-center justify-center rounded-full bg-slate-900 text-white shadow-xl shadow-slate-300 transition hover:scale-105 hover:bg-teal-700"
-        onClick={() => setShowVoiceModal(true)}
-        type="button"
-      >
-        <Mic size={40} />
-      </button>
-
-      <div className="mb-8 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h3 className="mb-4 text-sm font-semibold text-slate-800">最近语音记录</h3>
-        <div className="flex max-h-48 flex-col gap-2 overflow-y-auto">
-          {voiceHistory.length === 0 ? (
-            <p className="text-sm text-slate-400">暂无语音记录</p>
-          ) : (
-            voiceHistory.map((item) => (
-              <div className="rounded-lg border border-slate-100 bg-slate-50 p-3" key={item.id}>
-                <p className="text-sm text-slate-700">「{item.text}」</p>
-                <p className="mt-0.5 text-xs text-teal-600">{item.result}</p>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-
-      {showVoiceModal ? (
-        <VoiceModal
-          accessToken={accessToken}
-          language={language}
-          onClose={() => setShowVoiceModal(false)}
-          onTranscriptReady={onTranscriptReady}
-          voiceHistory={voiceHistory}
-        />
-      ) : null}
-    </div>
-  )
-}
-
 function App() {
   const sessionRef = useRef(loadSession())
   const clientRef = useRef(
@@ -714,7 +642,6 @@ function App() {
   const [notifications, setNotifications] = useState<NotificationItem[]>([])
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
   const [showCreateModal, setShowCreateModal] = useState(false)
-  const [showVoiceModal, setShowVoiceModal] = useState(false)
   const [showNotifPanel, setShowNotifPanel] = useState(false)
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false)
   const [isResizingSidebar, setIsResizingSidebar] = useState(false)
@@ -723,7 +650,6 @@ function App() {
   const [bootPending, setBootPending] = useState(Boolean(sessionRef.current))
   const [eventsPending, setEventsPending] = useState(false)
   const [notificationsPending, setNotificationsPending] = useState(false)
-  const [voiceHistory, setVoiceHistory] = useState<VoiceHistoryItem[]>([])
   const [pendingVoiceDraft, setPendingVoiceDraft] = useState<V1EventDraftRecord | null>(null)
   const [settingsSaving, setSettingsSaving] = useState(false)
   const [createPending, setCreatePending] = useState(false)
@@ -824,17 +750,6 @@ function App() {
     }
   }, [currentUser])
 
-  const loadVoiceHistory = useCallback(async () => {
-    if (!currentUser) return
-
-    try {
-      const items = await clientRef.current.getVoiceHistory()
-      setVoiceHistory(items.map(toVoiceHistoryModel))
-    } catch (error) {
-      console.error(error)
-    }
-  }, [currentUser])
-
   const playTts = useCallback(
     async (text: string) => {
       if (!currentUser?.settings.voiceFeedback) {
@@ -911,8 +826,7 @@ function App() {
 
     void loadEvents(currentDate)
     void loadNotifications()
-    void loadVoiceHistory()
-  }, [currentUser, currentDate, loadEvents, loadNotifications, loadVoiceHistory])
+  }, [currentUser, currentDate, loadEvents, loadNotifications])
 
   useEffect(() => {
     if (!currentUser) return
@@ -940,16 +854,6 @@ function App() {
       }
     }
   }, [currentUser, currentDate, loadEvents, loadNotifications])
-
-  async function handleVoiceTranscript(sourceText: string) {
-    setShowVoiceModal(false)
-    const draft = await handleDraftSubmit({ sourceText, source: 'voice' })
-    if (draft) {
-      setPendingVoiceDraft(draft)
-      setShowCreateModal(true)
-    }
-    void loadVoiceHistory()
-  }
 
   async function persistSession(session: {
     accessToken: string
@@ -1064,7 +968,6 @@ function App() {
 
           if (source === 'voice') {
             await playTts(`已为您创建${event.title ? '「' + event.title + '」' : '日程安排'}`)
-            void loadVoiceHistory()
           }
 
           return null
@@ -1087,7 +990,6 @@ function App() {
           const isVoiceFollowUp = pendingVoiceDraft?.draftId === input.draftId
           if (source === 'voice' || isVoiceFollowUp) {
             await playTts(`已为您创建${event.title ? '「' + event.title + '」' : '日程安排'}`)
-            void loadVoiceHistory()
             if (isVoiceFollowUp) {
               setPendingVoiceDraft(null)
             }
@@ -1403,7 +1305,7 @@ function App() {
               <button
                 aria-label="语音助手"
                 className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50"
-                onClick={() => setShowVoiceModal(true)}
+                onClick={() => setPage('voice')}
                 type="button"
               >
                 <Mic size={18} />
@@ -1429,7 +1331,7 @@ function App() {
               <button
                 aria-label="语音助手"
                 className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50"
-                onClick={() => setShowVoiceModal(true)}
+                onClick={() => setPage('voice')}
                 type="button"
               >
                 <Mic size={18} />
@@ -1470,12 +1372,18 @@ function App() {
           ) : null}
 
           {page === 'voice' ? (
-            <div className="h-full overflow-y-auto p-6">
-              <VoicePage
+            <div className="h-full overflow-y-auto">
+              <ChatAssistant
                 accessToken={sessionRef.current?.accessToken ?? null}
+                apiClient={clientRef.current}
+                events={events}
                 language={currentUser?.settings.language ?? 'zh-CN'}
-                onTranscriptReady={handleVoiceTranscript}
-                voiceHistory={voiceHistory}
+                onEventsChange={async () => {
+                  await loadEvents(currentDate)
+                }}
+                onPlayTts={playTts}
+                userTimezone={currentUser?.timezone ?? 'Asia/Shanghai'}
+                voiceFeedback={currentUser?.settings.voiceFeedback ?? false}
               />
             </div>
           ) : null}
@@ -1525,16 +1433,6 @@ function App() {
             setShowCreateModal(false)
           }}
           onSubmit={handleDraftSubmit}
-        />
-      ) : null}
-
-      {showVoiceModal ? (
-        <VoiceModal
-          accessToken={sessionRef.current?.accessToken ?? null}
-          language={currentUser?.settings.language ?? 'zh-CN'}
-          onClose={() => setShowVoiceModal(false)}
-          onTranscriptReady={handleVoiceTranscript}
-          voiceHistory={voiceHistory}
         />
       ) : null}
 

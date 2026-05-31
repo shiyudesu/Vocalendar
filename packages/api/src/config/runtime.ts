@@ -3,6 +3,8 @@ import { createClient } from 'redis'
 
 import { runPendingSqlMigrations } from '../db/migrator.js'
 import { listSqlMigrationFiles, type SqlMigrationFile } from '../db/migrator.js'
+import { createDeepSeekProvider } from '../integrations/llm/deepseek-provider.js'
+import type { LlmProvider } from '../integrations/llm/types.js'
 import { createAliyunVoiceProvider } from '../integrations/voice/aliyun-provider.js'
 import { mockVoiceProvider } from '../integrations/voice/mock-provider.js'
 import type { VoiceProvider } from '../integrations/voice/types.js'
@@ -73,6 +75,7 @@ export type RuntimeDependencies = {
     voiceHistory: VoiceHistoryRepository
   }
   voice: VoiceProvider
+  llm: LlmProvider
   reminders: ReminderRuntime
   tokens: ReturnType<typeof createTokenCodec>
   migrations: SqlMigrationFile[]
@@ -120,6 +123,12 @@ export async function createRuntimeDependencies(source: EnvSource): Promise<Runt
     voice: env.voice.aliyun.accessKeyId.includes('your-')
       ? mockVoiceProvider
       : createAliyunVoiceProvider(env.voice.aliyun),
+    llm: createDeepSeekProvider({
+      apiKey: env.llm.deepseek.apiKey,
+      baseUrl: env.llm.deepseek.baseUrl,
+      model: env.llm.deepseek.model,
+      timeoutMs: env.llm.deepseek.timeoutMs,
+    }),
     reminders,
     tokens,
     migrations,
@@ -161,7 +170,7 @@ function createDatabaseRuntime(env: ApiEnv): DatabaseRuntime {
 function createRedisRuntime(env: ApiEnv): RedisRuntime {
   const socketConfig = {
     reconnectStrategy: false as const,
-    connectTimeout: 250,
+    connectTimeout: 5000,
   }
 
   let clientOptions
@@ -182,6 +191,13 @@ function createRedisRuntime(env: ApiEnv): RedisRuntime {
 
   const client = createClient(clientOptions)
   const subscriber = createClient(clientOptions)
+
+  client.on('error', (err) => {
+    console.error('Redis client error:', err.message)
+  })
+  subscriber.on('error', (err) => {
+    console.error('Redis subscriber error:', err.message)
+  })
 
   return {
     url: displayUrl,

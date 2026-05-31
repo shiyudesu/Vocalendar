@@ -29,6 +29,14 @@ export type ApiEnv = {
       defaultLanguage: string
     }
   }
+  llm: {
+    deepseek: {
+      apiKey: string
+      baseUrl: string
+      model: string
+      timeoutMs: number
+    }
+  }
   export: {
     tempDir: string
   }
@@ -47,6 +55,9 @@ const DEFAULT_TOKEN_DOMAIN = 'nls-meta.cn-shanghai.aliyuncs.com'
 const DEFAULT_TOKEN_TTL_SECONDS = 3600
 const DEFAULT_LANGUAGE = 'zh-CN'
 const DEFAULT_EXPORT_TEMP_DIR = '/tmp/vocalendar-export'
+const DEFAULT_DEEPSEEK_BASE_URL = 'https://api.deepseek.com'
+const DEFAULT_DEEPSEEK_MODEL = 'deepseek-chat'
+const DEFAULT_DEEPSEEK_TIMEOUT_MS = 15000
 
 export function loadApiEnv(source: EnvSource): ApiEnv {
   const errors: string[] = []
@@ -111,6 +122,17 @@ export function loadApiEnv(source: EnvSource): ApiEnv {
         tokenDomain: source.ALIYUN_NLS_TOKEN_DOMAIN?.trim() || DEFAULT_TOKEN_DOMAIN,
         tokenTtlSeconds,
         defaultLanguage: source.ALIYUN_DEFAULT_LANGUAGE?.trim() || DEFAULT_LANGUAGE,
+      },
+    },
+    llm: {
+      deepseek: {
+        apiKey: source.DEEPSEEK_API_KEY?.trim() || '',
+        baseUrl: source.DEEPSEEK_BASE_URL?.trim() || DEFAULT_DEEPSEEK_BASE_URL,
+        model: source.DEEPSEEK_MODEL?.trim() || DEFAULT_DEEPSEEK_MODEL,
+        timeoutMs: readPositiveIntegerWithDefault(
+          source.DEEPSEEK_TIMEOUT_MS,
+          DEFAULT_DEEPSEEK_TIMEOUT_MS,
+        ),
       },
     },
     export: {
@@ -217,6 +239,20 @@ function readPositiveInteger(name: string, value: string | undefined, errors: st
   if (!Number.isInteger(parsed) || parsed <= 0) {
     errors.push(`${name} must be a positive integer`)
     return DEFAULT_TOKEN_TTL_SECONDS
+  }
+
+  return parsed
+}
+
+function readPositiveIntegerWithDefault(value: string | undefined, defaultValue: number): number {
+  if (value === undefined || value.trim() === '') {
+    return defaultValue
+  }
+
+  const parsed = Number(value)
+
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    return defaultValue
   }
 
   return parsed

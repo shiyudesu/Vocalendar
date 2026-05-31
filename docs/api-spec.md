@@ -320,7 +320,22 @@
 - `GET /voice/asr/ws` 通过 `accessToken` query 参数鉴权
 - API 服务端代理阿里云实时识别 WebSocket 协议，不将 provider 协议暴露给客户端
 
-### 4.6 Intelligence
+### 4.6 Assistant（对话式语音助手）
+
+| 方法 | 路径 | 作用 | 阶段 |
+| --- | --- | --- | --- |
+| `POST` | `/assistant/chat` | LLM 驱动的对话入口 | V1.0 |
+
+说明：
+
+- 接收用户消息历史 + 最近事件上下文
+- 通过 DeepSeek LLM 做意图识别、槽位提取、事件拆分
+- 返回助手回复 + 结构化操作列表（`create` / `update` / `delete` / `query` / `clarify`）
+- 前端根据 `needsConfirmation` 展示操作确认卡片
+- 创建/更新/删除操作由前端调用现有 Events / Drafts API 执行
+- LLM 不可用时返回 `LLM_UNAVAILABLE`（503）
+
+### 4.7 Intelligence
 
 | 方法 | 路径 | 作用 | 阶段 |
 | --- | --- | --- | --- |
@@ -334,7 +349,7 @@
 - `会议延期 15 分钟`
 - `会议取消`
 
-### 4.7 Notifications
+### 4.8 Notifications
 
 | 方法 | 路径 | 作用 | 阶段 |
 | --- | --- | --- | --- |
@@ -352,7 +367,7 @@
   - 回写对应 reminder 的 `sentAt`
 - `Notification.time` 表示本次通知实际触发时间；`snooze` 会把该时间顺延
 
-### 4.8 Realtime
+### 4.9 Realtime
 
 | 方法 | 路径 | 作用 | 阶段 |
 | --- | --- | --- | --- |
@@ -372,7 +387,7 @@
 - `notification.new`
 - `draft.clarification`
 
-### 4.9 Sync
+### 4.10 Sync
 
 | 方法 | 路径 | 作用 | 阶段 |
 | --- | --- | --- | --- |
@@ -614,7 +629,66 @@
   - 文件内容为 `VCALENDAR`，每个事件导出为 `VEVENT`
   - 若事件带重复规则、参与者、提醒，则分别导出 `RRULE`、`ATTENDEE`、`VALARM`
 
-### 5.5 `POST /intelligence/conflicts`
+### 5.5 `POST /assistant/chat`
+
+请求体：
+
+```json
+{
+  "messages": [
+    { "role": "user", "content": "明天下午三点和张总在国贸喝咖啡", "type": "voice" }
+  ],
+  "timezone": "Asia/Shanghai",
+  "referenceAt": "2026-05-30T01:00:00.000Z",
+  "recentEvents": [
+    {
+      "id": "evt_001",
+      "title": "周会",
+      "startTime": "2026-05-31T02:00:00.000Z",
+      "location": null
+    }
+  ]
+}
+```
+
+成功响应：
+
+```json
+{
+  "data": {
+    "reply": {
+      "role": "assistant",
+      "content": "我识别到了 1 个可执行操作（创建），请确认是否执行："
+    },
+    "actions": [
+      {
+        "id": "act_001",
+        "type": "create",
+        "status": "pending",
+        "eventDraft": {
+          "title": "喝咖啡",
+          "startAt": "2026-05-31T07:00:00.000Z",
+          "endAt": null,
+          "timezone": "Asia/Shanghai",
+          "location": "国贸",
+          "participants": ["张总"]
+        }
+      }
+    ],
+    "needsConfirmation": true
+  }
+}
+```
+
+错误响应：
+
+| 错误码 | 场景 |
+|---|---|
+| `LLM_UNAVAILABLE` | DeepSeek API 调用失败 |
+| `LLM_PARSE_ERROR` | LLM 返回非预期格式 |
+| `RATE_LIMITED` | 触发限流 |
+
+### 5.6 `POST /intelligence/conflicts`
 
 请求体：
 
@@ -628,7 +702,7 @@
 }
 ```
 
-### 5.6 `POST /voice/commands/execute`
+### 5.7 `POST /voice/commands/execute`
 
 请求体：
 
