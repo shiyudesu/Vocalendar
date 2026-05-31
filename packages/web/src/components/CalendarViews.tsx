@@ -1,5 +1,5 @@
-import { CalendarDays, ChevronLeft, ChevronRight, Clock, MapPin, Users } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { ChevronLeft, ChevronRight, Clock, MapPin, Users } from 'lucide-react'
+import { useMemo } from 'react'
 
 import {
   getEventsForDate,
@@ -17,10 +17,6 @@ const WEEK_DAYS_SHORT = ['日', '一', '二', '三', '四', '五', '六']
 
 function formatTime(date: Date): string {
   return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
-}
-
-function formatDate(date: Date): string {
-  return `${date.getMonth() + 1}月${date.getDate()}日`
 }
 
 function formatDateFull(date: Date): string {
@@ -45,10 +41,6 @@ function getWeekStart(date: Date): Date {
   d.setDate(d.getDate() - day)
   d.setHours(0, 0, 0, 0)
   return d
-}
-
-function getMonthStart(year: number, month: number): Date {
-  return new Date(year, month, 1)
 }
 
 function getMonthGrid(year: number, month: number): Date[] {
@@ -303,7 +295,7 @@ export function WeekView({
           </div>
 
           {/* Day columns */}
-          {days.map((day, dayIndex) => {
+          {days.map((_day, dayIndex) => {
             const dayEvents = eventsByDay[dayIndex]
             const eventPositions = dayEvents.map((event) => {
               const startHour = event.startTime.getHours() + event.startTime.getMinutes() / 60

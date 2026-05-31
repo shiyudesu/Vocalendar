@@ -62,10 +62,13 @@
 | `VALIDATION_ERROR` | 请求参数校验失败 |
 | `UNAUTHORIZED` | 未认证 |
 | `FORBIDDEN` | 无权访问 |
+| `EMAIL_ALREADY_EXISTS` | 邮箱已被注册 |
+| `INVALID_CREDENTIALS` | 邮箱或密码错误 |
 | `USER_NOT_FOUND` | 用户不存在 |
 | `EVENT_NOT_FOUND` | 事件不存在 |
 | `DRAFT_NOT_FOUND` | 草稿不存在 |
 | `DRAFT_EXPIRED` | 草稿过期或不可确认 |
+| `DRAFT_MISSING_FIELDS` | 草稿缺少必要字段，尚不能确认创建事件 |
 | `DRAFT_PARSE_FAILED` | 文本 / 语音无法解析成有效草稿 |
 | `TIME_CONFLICT` | 与已有事件冲突 |
 | `ATTENDEE_NOT_FOUND` | 参与者不存在 |
@@ -112,6 +115,7 @@
 | `byMonthDay` | number[] | 否 | 月内重复日 |
 | `until` | string \| null | 否 | 截止时间 |
 | `count` | number \| null | 否 | 重复次数 |
+| `exclusions` | string[] | 否 | 被跳过的原始实例开始时间列表 |
 
 ### 3.3 Reminder
 
@@ -231,7 +235,7 @@
 | 方法 | 路径 | 作用 | 阶段 |
 | --- | --- | --- | --- |
 | `GET` | `/events` | 按时间范围 / 关键词 / 来源 / 优先级查询事件 | MVP |
-| `POST` | `/events` | 创建事件 | MVP |
+| `POST` | `/events` | 根据 `draftId` 创建事件的兼容入口 | MVP |
 | `GET` | `/events/{eventId}` | 获取事件详情 | MVP |
 | `PUT` | `/events/{eventId}` | 全量更新事件 | MVP |
 | `DELETE` | `/events/{eventId}` | 删除事件 | MVP |
@@ -255,6 +259,20 @@
 - `recurrenceScope=following`
 - `recurrenceScope=all`
 
+说明：
+
+- 对 `PUT /events/{eventId}`：
+  - `recurrenceScope=single` 或 `following` 时，请求体必须额外带 `occurrenceStartTime`
+  - `occurrenceStartTime` 表示本次命中的原始实例开始时间
+- 对 `DELETE /events/{eventId}`：
+  - `recurrenceScope` 与 `occurrenceStartTime` 通过 query 传递
+  - `single` / `following` 必须带 `occurrenceStartTime`
+- 当前实现语义：
+  - `single update`：将该实例从原系列排除，并生成一个独立的非重复事件
+  - `following update`：按命中实例切断原系列，并为该实例及其后续实例生成新的重复系列
+  - `single delete`：仅把该实例加入 `recurrence.exclusions`
+  - `following delete`：截断命中实例及其后续实例
+
 ### 4.3 Attendees
 
 | 方法 | 路径 | 作用 | 阶段 |
@@ -264,6 +282,12 @@
 | `DELETE` | `/events/{eventId}/attendees/{attendeeId}` | 移除参与者 | MVP |
 | `POST` | `/events/{eventId}/attendees/invitations` | 发送邀请 | V1.0 |
 
+说明：
+
+- 仅对已存在 Vocalendar 账户的参与者发送内部邀请通知
+- 当前返回聚合结果：`sentCount`、`skippedCount`
+- 当前不发送外部邮件
+
 ### 4.4 Drafts / Voice Core
 
 | 方法 | 路径 | 作用 | 阶段 |
@@ -272,6 +296,11 @@
 | `PATCH` | `/drafts/{draftId}` | 草稿补充与修正 | MVP |
 | `POST` | `/drafts/{draftId}/confirm` | 确认草稿并创建事件 | MVP |
 | `GET` | `/voice-history` | 获取语音历史 | V1.0 |
+
+说明：
+
+- `POST /drafts/{draftId}/confirm` 是目标态草稿确认接口
+- 当前实现仍保留 `POST /events` + `draftId` 作为兼容入口，两者都调用同一套草稿确认逻辑
 
 ### 4.5 ASR / TTS
 
@@ -287,6 +316,7 @@
 - `VAD` 不是独立 API
 - 客户端负责停录时机
 - API 负责音频接收、ASR 调用、失败处理和草稿衔接
+- `POST /voice/asr`、`POST /voice/tts` 需要 Bearer Token
 - `GET /voice/asr/ws` 通过 `accessToken` query 参数鉴权
 - API 服务端代理阿里云实时识别 WebSocket 协议，不将 provider 协议暴露给客户端
 
@@ -313,11 +343,26 @@
 | `DELETE` | `/notifications/{notificationId}` | 删除通知 | MVP |
 | `POST` | `/notifications/{notificationId}/snooze` | 稍后提醒 | V1.0 |
 
+说明：
+
+- `PUT /events/{eventId}/reminders` 仅覆盖事件上的提醒配置，不会在写入时立即生成通知
+- 服务端后台 reminder processor 会按提醒触发时间扫描到期 reminder，并在到期时：
+  - 创建 `notifications` 记录
+  - 推送 `notification.new` realtime 事件
+  - 回写对应 reminder 的 `sentAt`
+- `Notification.time` 表示本次通知实际触发时间；`snooze` 会把该时间顺延
+
 ### 4.8 Realtime
 
 | 方法 | 路径 | 作用 | 阶段 |
 | --- | --- | --- | --- |
 | `GET` | `/realtime/ws` | 建立 WebSocket 实时同步连接 | V1.0 |
+
+连接方式：
+
+- URL：`/api/v1/realtime/ws?accessToken=<jwt>`
+- 协议：WebSocket
+- 鉴权：使用当前用户 `accessToken`
 
 推送事件类型：
 
@@ -354,6 +399,45 @@
 }
 ```
 
+### 5.1A `POST /drafts/{draftId}/confirm`
+
+成功返回：
+
+```json
+{
+  "data": {
+    "event": {
+      "id": "evt_001",
+      "userId": "usr_001",
+      "title": "喝咖啡",
+      "description": null,
+      "startTime": "2026-05-30T07:00:00.000Z",
+      "endTime": null,
+      "allDay": false,
+      "timezone": "Asia/Shanghai",
+      "location": "国贸",
+      "recurrence": null,
+      "reminders": [],
+      "attendees": [],
+      "priority": "normal",
+      "tags": [],
+      "source": "voice",
+      "createdAt": "2026-05-30T01:05:00.000Z",
+      "updatedAt": "2026-05-30T01:05:00.000Z"
+    }
+  },
+  "meta": {
+    "requestId": "req_abc123",
+    "timestamp": "2026-05-30T15:00:00.000Z"
+  }
+}
+```
+
+失败语义：
+
+- 草稿不存在：`404 DRAFT_NOT_FOUND`
+- 草稿仍缺字段：`422 DRAFT_MISSING_FIELDS`
+
 ### 5.2 `POST /voice/asr`
 
 请求体：
@@ -383,6 +467,12 @@
   }
 }
 ```
+
+鉴权：
+
+- Bearer Token
+- 当前请求体走 `multipart/form-data`
+- 当前服务端将音频字节透传给阿里云上传 ASR HTTP 接口
 
 ### 5.3 `GET /voice/asr/ws`
 
@@ -485,14 +575,20 @@
 }
 ```
 
+鉴权：
+
+- Bearer Token
+- 当前成功响应中的 `audioUrl` 为 `data:` URL，直接内嵌音频字节
+
+### 5.4A `POST /events/{eventId}/attendees/invitations`
+
 成功返回：
 
 ```json
 {
   "data": {
-    "audioUrl": "https://cdn.vocalendar.app/tts/tts_001.mp3",
-    "durationMs": 2800,
-    "mimeType": "audio/mpeg"
+    "sentCount": 1,
+    "skippedCount": 0
   },
   "meta": {
     "requestId": "req_abc123",
@@ -500,6 +596,23 @@
   }
 }
 ```
+
+### 5.4B `GET /me/export?format=ics|csv`
+
+说明：
+
+- `csv` 当前导出两段内容：
+  - 当前用户基础资料
+  - 当前用户事件列表
+- `ics` 当前导出当前用户全部事件的 `VEVENT`
+- 当前实现直接返回文件内容，不包 `data/meta` JSON
+- `format=csv`：
+  - `Content-Type: text/csv; charset=utf-8`
+  - 文件内容包含用户资料表头和事件列表表头
+- `format=ics`：
+  - `Content-Type: text/calendar; charset=utf-8`
+  - 文件内容为 `VCALENDAR`，每个事件导出为 `VEVENT`
+  - 若事件带重复规则、参与者、提醒，则分别导出 `RRULE`、`ATTENDEE`、`VALARM`
 
 ### 5.5 `POST /intelligence/conflicts`
 

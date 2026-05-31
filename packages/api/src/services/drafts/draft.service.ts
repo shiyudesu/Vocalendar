@@ -1,14 +1,22 @@
 import type {
   CreateDraftRequest,
-  EventDraft,
-  EventDraftParsed,
   UpdateDraftRequest,
+  V1EventDraftParsed as EventDraftParsed,
+  V1EventDraftRecord as EventDraft,
 } from '@vocalendar/schemas'
 
-import { eventMemoryRepository } from '../../repositories/events.memory.js'
+import type { EventsRepository } from '../../repositories/events.types.js'
 import { parseDraftFields } from './draft-parser.js'
 
-export function createDraft(input: CreateDraftRequest): EventDraft {
+type DraftDependencies = {
+  eventsRepository: EventsRepository
+}
+
+export async function createDraft(
+  input: CreateDraftRequest,
+  dependencies: DraftDependencies,
+  options: { userId?: string | null } = {},
+) {
   const parsedDraft = parseDraftFields({
     sourceText: input.sourceText,
     timezone: input.timezone,
@@ -16,6 +24,7 @@ export function createDraft(input: CreateDraftRequest): EventDraft {
   })
   const draft: EventDraft = {
     draftId: `drf_${crypto.randomUUID()}`,
+    userId: options.userId ?? null,
     sourceText: input.sourceText,
     source: input.source,
     referenceAt: input.referenceAt,
@@ -27,11 +36,16 @@ export function createDraft(input: CreateDraftRequest): EventDraft {
     clarificationPrompt: parsedDraft.clarificationPrompt,
   }
 
-  return eventMemoryRepository.saveDraft(draft)
+  return await dependencies.eventsRepository.saveDraft(draft)
 }
 
-export function updateDraft(draftId: string, input: UpdateDraftRequest): EventDraft | null {
-  const currentDraft = eventMemoryRepository.findDraft(draftId)
+export async function updateDraft(
+  draftId: string,
+  input: UpdateDraftRequest,
+  dependencies: DraftDependencies,
+  options: { userId?: string | null } = {},
+) {
+  const currentDraft = await dependencies.eventsRepository.findDraft(draftId, options.userId)
 
   if (!currentDraft) {
     return null
@@ -62,7 +76,7 @@ export function updateDraft(draftId: string, input: UpdateDraftRequest): EventDr
     clarificationPrompt: buildClarificationPrompt(missingFields),
   }
 
-  return eventMemoryRepository.saveDraft(draft)
+  return await dependencies.eventsRepository.saveDraft(draft)
 }
 
 function mergeParsedFields(

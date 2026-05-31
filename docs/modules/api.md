@@ -99,16 +99,17 @@
 
 ## 4. 当前差距
 
-截至 `2026-05-30`，当前仓库代码仍主要停留在文本草稿解析与基础事件闭环，存在以下差距：
+截至 `2026-05-31`，当前仓库代码已补齐阶段 1-2 的基础底座与认证最小闭环，但事件、通知、语音与实时能力仍显著落后于契约，主要差距如下：
 
-- 无正式账号体系实现
-- 无在线 ASR / TTS 能力
-- 无快捷指令执行能力
-- 无智能建议能力
-- 无 WebSocket 同步能力
+- 认证、事件、草稿、通知、语音历史与 realtime outbox 已接入非测试 runtime 的 Postgres 仓储，但仍未完成真实 docker-compose 集成验证
+- 提醒已接入后台 due-time processor，支持 reminder 持久化、到期判定、通知记录生成与 `notification.new` realtime 推送
+- `POST /voice/asr`、`POST /voice/tts`、`GET /voice/providers` 与 `GET /voice/asr/ws` 已接入运行时阿里云 provider adapter，但仍未完成 live 凭证与 docker-compose 环境下的端到端验证
+- 快捷指令执行能力尚未实现
+- 智能建议能力尚未实现
+- WebSocket 同步已落库 realtime outbox，并已接入 Redis pub/sub 路径；但仍未完成 docker-compose / 多实例 live 广播验证
 - 无离线同步协议实现
+- 重复事件范围更新 / 删除已实现 `single|following|all` 真实语义，使用 `occurrenceStartTime` 锚定命中实例
 - 前端语音流程仍是 mock
-- 深色模式尚未验证真实系统联动
 
 ## 5. 开发任务拆分
 
@@ -116,18 +117,18 @@
 | --- | --- | --- | --- | --- |
 | `#13` | `GET/PUT/DELETE /events/{id}` | MVP | 现有事件仓储 | 🔵 可开工 |
 | `#14` | `GET /events` 时间范围查询 / 搜索 | MVP | Parser 范围解析 | 🔵 可开工 |
-| `#15` | `source=voice` 草稿接入 | MVP | Voice 转写文本 | ⏳ 待开始 |
-| `#16` | 提醒数组更新 / 通知基础接口 | V1.0 | Schemas | ⏳ 待开始 |
-| `#17` | 认证与账户接口 | MVP | Schemas | ⏳ 待开始 |
-| `#18` | 重复事件范围更新 / 删除接口 | V1.0 | Schemas / 仓储 | ⏳ 待开始 |
-| `#19` | `POST /voice/asr` + `GET /voice/asr/ws` 与 provider 抽象 | V1.0 | Voice provider | ⏳ 待开始 |
-| `#20` | `POST /voice/tts` 与设置联动 | V1.0 | TTS provider | ⏳ 待开始 |
-| `#21` | `GET /voice/providers` 能力状态接口 | V1.0 | 配置层 | ⏳ 待开始 |
-| `#22` | 语音历史接口 | V1.0 | 仓储 | ⏳ 待开始 |
+| `#15` | `source=voice` 草稿接入 | MVP | Voice 转写文本 | ✅ 已完成 |
+| `#16` | 提醒数组更新 / 通知基础接口 | V1.0 | Schemas | ✅ 已完成 |
+| `#17` | 认证与账户接口 | MVP | Schemas | ✅ 已完成 |
+| `#18` | 重复事件范围更新 / 删除接口 | V1.0 | Schemas / 仓储 | ✅ 已完成 |
+| `#19` | `POST /voice/asr` + `GET /voice/asr/ws` 与 provider 抽象 | V1.0 | Voice provider | 🟡 待 live 验证 |
+| `#20` | `POST /voice/tts` 与设置联动 | V1.0 | TTS provider | 🟡 待 live 验证 |
+| `#21` | `GET /voice/providers` 能力状态接口 | V1.0 | 配置层 | 🟡 待 live 验证 |
+| `#22` | 语音历史接口 | V1.0 | 仓储 | ✅ 已完成 |
 | `#23` | `POST /intelligence/conflicts` | V1.5 | Parser | ⏳ 待开始 |
 | `#24` | `POST /intelligence/suggestions` | V1.5 | Parser / 历史数据 | ⏳ 待开始 |
 | `#25` | `POST /voice/commands/execute` | V1.5 | Parser | ⏳ 待开始 |
-| `#26` | `GET /realtime/ws` 实时同步 | V1.0 | Redis / 推送层 | ⏳ 待开始 |
+| `#26` | `GET /realtime/ws` 实时同步 | V1.0 | Redis / 推送层 | 🟡 待 live 验证 |
 | `#27` | `/sync/bootstrap` + `/sync/mutations` | V2.0 | Mobile / 仓储 | ⏳ 待开始 |
 
 ## 6. 验收标准

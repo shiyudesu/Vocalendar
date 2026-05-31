@@ -1,7 +1,7 @@
 import { Bell, Clock, MapPin, Pencil, Repeat, Tag, Trash2, Users, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
-import { getPriorityColor, mockUser } from '../data/mock'
+import { getPriorityColor } from '../data/mock'
 import type { Attendee, Event, RecurrenceRule, Reminder } from '../data/mock'
 import { TagChip } from './TagChip'
 import { TagInput } from './TagInput'

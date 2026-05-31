@@ -47,10 +47,14 @@ export function draftParseFailed(c: Context, details: unknown) {
 }
 
 export function notFound(c: Context, message: string, details: unknown) {
+  return notFoundWithCode(c, message, details, 'NOT_FOUND')
+}
+
+export function notFoundWithCode(c: Context, message: string, details: unknown, code: string) {
   return c.json(
     {
       error: {
-        code: 'NOT_FOUND',
+        code,
         message,
         details,
       },
@@ -60,6 +64,28 @@ export function notFound(c: Context, message: string, details: unknown) {
       },
     },
     404,
+  )
+}
+
+export function unauthorized(c: Context, message: string, details: unknown = null) {
+  const code =
+    typeof details === 'object' && details && 'code' in details
+      ? String((details as { code: string }).code)
+      : 'UNAUTHORIZED'
+
+  return c.json(
+    {
+      error: {
+        code,
+        message,
+        details,
+      },
+      meta: {
+        requestId: c.req.header('x-request-id') ?? 'dev-request',
+        timestamp: nowIso(),
+      },
+    },
+    401,
   )
 }
 

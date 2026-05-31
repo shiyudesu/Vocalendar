@@ -15,12 +15,32 @@
 - 在 `packages/api` 建立 `config/env`、数据库连接、migration、repository 分层、Redis 接入、JWT 配置读取。
 - 明确统一命名：事件字段使用 `startTime/endTime`，事件来源使用 `voice | manual`，列表统一 cursor 分页。
 
+当前完成状态（`2026-05-31`）：
+
+- 已完成 `packages/schemas` 的 `v1` 目标态基础 schema 增量导出。
+- 已完成 `packages/api` 的 `env`、migration loader、pending migration runner、runtime bootstrap、JWT token codec 与启动期 Redis 连接骨架。
+- 已补充 phase 1 的测试，并通过：
+  - `pnpm --filter @vocalendar/schemas test`
+  - `pnpm --filter @vocalendar/schemas check`
+  - `pnpm --filter @vocalendar/api test`
+  - `pnpm --filter @vocalendar/api check`
+  - `pnpm --filter @vocalendar/api build`
+
 ### 阶段 2：MVP 认证与账户
 
 - 实现本地邮箱密码 `register/login/refresh/logout`。
 - 实现 `GET/PATCH /me`、`PATCH /me/settings`、`DELETE /me`。
 - 引入多设备会话模型，`accessToken=15m`，`refreshToken=30d`。
 - 为所有需鉴权路由补认证中间件、错误码与 request context。
+
+当前完成状态（`2026-05-31`）：
+
+- 已完成 `register/login/refresh/logout`、`GET/PATCH /me`、`PATCH /me/settings`、`DELETE /me` 的最小内存实现。
+- 已补齐用户/会话内存仓储、密码哈希、Hono 鉴权 middleware 与 request context typing。
+- 已引入 `users` 仓储接口与 Postgres `users/user_sessions` 仓储实现，并将 auth/export 链路切到 runtime 仓储注入模式。
+- 阶段 2 当前仍未完成的关键项：
+  - 测试环境仍默认使用内存用户仓储，真实 Postgres 运行验证尚未完成
+  - 统一错误码尚未收口到最终目标态
 
 ### 阶段 3：MVP 事件主链路
 
@@ -30,12 +50,30 @@
 - 实现参与者接口：添加、更新状态、删除。
 - 保留现有文本解析逻辑，但迁移到目标态 schema 与错误码。
 
+当前完成状态（`2026-05-31`）：
+
+- 已将事件 HTTP 契约升级到 `v1` 字段与 cursor 分页风格。
+- 已完成 `POST /events`、`GET /events`、`GET/PUT/DELETE /events/{id}` 的运行时鉴权与用户隔离实现。
+- 已完成 `GET /events` 的 `startDate/endDate/keyword/source/priority` 过滤查询。
+- 已完成与 migration 对齐的 `event_drafts`、`events`、`event_reminders`、`event_attendees` Postgres 仓储，并在非测试 runtime 中启用。
+- 已完成参与者添加、状态更新、删除与内部邀请通知接口。
+- 已完成重复事件范围更新 / 删除的真实 `single|following|all` 语义，使用 `occurrenceStartTime` 锚定命中实例，并支持 `recurrence.exclusions`。
+- 草稿解析链路仍沿用早期文本解析逻辑，但已切入目标态草稿记录与 Postgres 仓储模型。
+
 ### 阶段 4：通知、提醒、重复事件与导出
 
 - 实现 `GET/PATCH/DELETE /notifications` 与 `POST /notifications/{id}/snooze`。
 - 实现 `PUT /events/{id}/reminders` 与提醒到期生成通知记录。
 - 实现重复事件范围更新/删除，支持 `single|following|all`。
 - 实现 `GET /me/export?format=ics|csv`，采用直接文件下载。
+
+当前完成状态（`2026-05-31`）：
+
+- 已完成 `GET/PATCH/DELETE /notifications`、`POST /notifications/{id}/snooze` 的内存实现。
+- 已完成 `PUT /events/{id}/reminders` 的用户隔离实现，并接入后台 reminder processor，支持到期判定、通知记录生成与 realtime 推送。
+- 已完成与 migration 对齐的 `notifications` Postgres 仓储，并在非测试 runtime 中启用。
+- 已完成重复事件范围更新 / 删除的真实 `single|following|all` 语义，使用 `occurrenceStartTime` 锚定命中实例，并支持 `recurrence.exclusions`。
+- 已完成 `GET /me/export?format=ics|csv` 的完整事件数据导出，当前 CSV / ICS 均覆盖核心事件字段、重复规则、参与者与提醒。
 
 ### 阶段 5：语音能力
 
@@ -45,12 +83,32 @@
 - 实时 ASR 首期只支持 `pcm / 16kHz / mono`；VAD 仍由客户端负责。
 - 语音历史只存元数据与识别/合成结果，不存原始音频。
 
+当前完成状态（`2026-05-31`）：
+
+- 已完成 `POST /voice/asr` 上传音频识别、`POST /voice/tts`、`GET /voice/providers`、`GET /voice-history` 的运行时 provider 接口接线。
+- 已完成默认 runtime 的阿里云 token / 上传 ASR / TTS HTTP adapter，测试环境仍可覆盖注入 provider。
+- 已完成 `GET /voice/asr/ws` 的 provider 驱动 WebSocket 会话桥接，支持 `accessToken` query 鉴权、`session.start` / 二进制帧 / `session.finish` 基础消息流。
+- 已完成默认 runtime 的阿里云 realtime ASR WebSocket adapter 最小实现。
+- 已完成语音历史内存存储与 provider 状态查询。
+- 阶段 5 当前仍未完成的关键项：
+  - 真实阿里云 provider 仍缺少 live 凭证与 docker-compose 环境下的端到端验证
+
 ### 阶段 6：实时同步与统一收口
 
 - 实现 `GET /realtime/ws`。
 - 对事件与通知写操作广播 `event.created`、`event.updated`、`event.deleted`、`notification.new`、`draft.clarification`。
 - 统一错误码、鉴权、provider 状态判断、WS 鉴权、导出响应格式。
 - 拆分当前单体 `app.test.ts`，按资源组织契约测试与集成测试。
+
+当前完成状态（`2026-05-31`）：
+
+- 已完成 `GET /realtime/ws` 的最小 WebSocket 实现，支持 `accessToken` query 鉴权。
+- 已支持连接建立时回放当前用户的实时事件，并在后续事件/通知写操作时向连接推送新增事件。
+- 已完成与 migration 对齐的 `realtime_outbox` Postgres 仓储，并在非测试 runtime 中启用。
+- 已接入 Redis pub/sub 多实例广播路径，并补齐 `draft.clarification`、`event.updated`、`notification.new` 推送链路。
+- 已补充 WebSocket 集成测试，覆盖 `voice/asr/ws` 与 `realtime/ws` 的最小握手与消息流。
+- 阶段 6 当前仍未完成的关键项：
+  - docker-compose / 多实例环境下的 live 广播验证仍未完成
 
 ## Branch And PR Workflow
 
