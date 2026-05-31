@@ -1,11 +1,13 @@
 import { ChevronLeft, ChevronRight, Clock, MapPin, Users } from 'lucide-react'
 import { useMemo } from 'react'
+import type { CSSProperties } from 'react'
 
 import {
   getEventsForDate,
   getEventsForMonth,
   getEventsForWeek,
   getPriorityColor,
+  getTimedEventLayouts,
 } from '../lib/calendar'
 import type { Event } from '../lib/models'
 import { getTagPalette, UNTAGGED_PALETTE } from '../lib/tagPalette'
@@ -55,6 +57,38 @@ function getMonthGrid(year: number, month: number): Date[] {
     days.push(d)
   }
   return days
+}
+
+function getTimedEventStyle({
+  top,
+  height,
+  lane,
+  laneCount,
+  leftInset = 0,
+  rightInset = 0,
+  laneGap = 4,
+}: {
+  top: number
+  height: number
+  lane: number
+  laneCount: number
+  leftInset?: number
+  rightInset?: number
+  laneGap?: number
+}): CSSProperties {
+  const laneWidthPercent = 100 / laneCount
+  const laneOffsetPercent = laneWidthPercent * lane
+  const totalInset = leftInset + rightInset
+  const laneOffsetPx = leftInset - (totalInset * lane) / laneCount
+  const laneWidthInset = totalInset / laneCount + (laneCount > 1 ? laneGap : 0)
+  const signedOffset = laneOffsetPx >= 0 ? `+ ${laneOffsetPx}px` : `- ${Math.abs(laneOffsetPx)}px`
+
+  return {
+    top,
+    height,
+    left: `calc(${laneOffsetPercent}% ${signedOffset})`,
+    width: `calc(${laneWidthPercent}% - ${laneWidthInset}px)`,
+  }
 }
 
 // ─── Event Card ───
@@ -140,16 +174,7 @@ export function DayView({
   const dayEvents = useMemo(() => getEventsForDate(events, date), [events, date])
 
   const eventPositions = useMemo(() => {
-    const sorted = [...dayEvents].sort((a, b) => a.startTime.getTime() - b.startTime.getTime())
-    return sorted.map((event) => {
-      const startHour = event.startTime.getHours() + event.startTime.getMinutes() / 60
-      const endHour = event.endTime
-        ? event.endTime.getHours() + event.endTime.getMinutes() / 60
-        : startHour + 1
-      const top = startHour * 64 + 2
-      const height = Math.max((endHour - startHour) * 64 - 6, 24)
-      return { event, top, height }
-    })
+    return getTimedEventLayouts(dayEvents)
   }, [dayEvents])
 
   return (
@@ -183,18 +208,25 @@ export function DayView({
           ))}
 
           {/* Events */}
-          {eventPositions.map(({ event, top, height }) => {
+          {eventPositions.map(({ event, top, height, lane, laneCount }) => {
             const palette =
               event.tags && event.tags.length > 0 ? getTagPalette(event.tags[0]) : UNTAGGED_PALETTE
             const isHigh = event.priority === 'high'
             return (
               <button
-                className={`absolute right-2 left-16 cursor-pointer overflow-hidden rounded-md border ${palette.eventBg} ${palette.eventBorder} ${palette.eventHover} px-2 py-1 text-left text-xs transition ${
+                className={`absolute cursor-pointer overflow-hidden rounded-md border ${palette.eventBg} ${palette.eventBorder} ${palette.eventHover} px-2 py-1 text-left text-xs transition ${
                   isHigh ? 'ring-2 ring-rose-400/40' : ''
                 }`}
                 key={event.id}
                 onClick={() => onEventClick(event)}
-                style={{ top, height }}
+                style={getTimedEventStyle({
+                  top,
+                  height,
+                  lane,
+                  laneCount,
+                  leftInset: 64,
+                  rightInset: 8,
+                })}
                 type="button"
               >
                 <div className="flex items-center gap-1.5">
@@ -297,15 +329,7 @@ export function WeekView({
           {/* Day columns */}
           {days.map((_day, dayIndex) => {
             const dayEvents = eventsByDay[dayIndex]
-            const eventPositions = dayEvents.map((event) => {
-              const startHour = event.startTime.getHours() + event.startTime.getMinutes() / 60
-              const endHour = event.endTime
-                ? event.endTime.getHours() + event.endTime.getMinutes() / 60
-                : startHour + 1
-              const top = startHour * 64 + 2
-              const height = Math.max((endHour - startHour) * 64 - 6, 24)
-              return { event, top, height }
-            })
+            const eventPositions = getTimedEventLayouts(dayEvents)
 
             return (
               <div
@@ -318,7 +342,7 @@ export function WeekView({
                 ))}
 
                 {/* Events */}
-                {eventPositions.map(({ event, top, height }) => {
+                {eventPositions.map(({ event, top, height, lane, laneCount }) => {
                   const palette =
                     event.tags && event.tags.length > 0
                       ? getTagPalette(event.tags[0])
@@ -326,12 +350,19 @@ export function WeekView({
                   const isHigh = event.priority === 'high'
                   return (
                     <button
-                      className={`absolute right-0.5 left-0.5 cursor-pointer overflow-hidden rounded border ${palette.eventBg} ${palette.eventBorder} ${palette.eventHover} px-1.5 py-1 text-left transition ${
+                      className={`absolute cursor-pointer overflow-hidden rounded border ${palette.eventBg} ${palette.eventBorder} ${palette.eventHover} px-1.5 py-1 text-left transition ${
                         isHigh ? 'ring-2 ring-rose-400/40' : ''
                       }`}
                       key={event.id}
                       onClick={() => onEventClick(event)}
-                      style={{ top, height }}
+                      style={getTimedEventStyle({
+                        top,
+                        height,
+                        lane,
+                        laneCount,
+                        leftInset: 2,
+                        rightInset: 2,
+                      })}
                       type="button"
                     >
                       <div className="flex items-center gap-1">
